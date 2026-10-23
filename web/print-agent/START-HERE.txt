@@ -1,4 +1,4 @@
-﻿COTTAGE POS PRINT AGENT 2.0.1 - WINDOWS x64
+﻿COTTAGE POS PRINT AGENT 2.0.2 - WINDOWS x64
 =========================================
 ชุดพร้อมใช้สำหรับ Windows 10/11 แบบ 64-bit รวม Node.js แล้ว ไม่ต้องติดตั้ง Node.js หรือ npm เพิ่ม
 

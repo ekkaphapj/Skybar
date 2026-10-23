@@ -1,6 +1,6 @@
 {
   "name": "cottage-pos-print-agent",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Local print agent: receives receipts from the POS web app and prints ESC/POS to a USB thermal printer via the Windows spooler",
   "main": "agent.js",
   "type": "commonjs",

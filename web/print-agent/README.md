@@ -1,4 +1,4 @@
-﻿# Cottage POS Print Agent 2.0.1
+﻿# Cottage POS Print Agent 2.0.2
 
 ชุดพร้อมใช้ Windows 10/11 x64: ดาวน์โหลดจาก https://github.com/ekkaphapj/Skybar/releases/latest
 ZIP แบบ Windows x64 รวม Node.js และใบอนุญาตแล้ว แตกไฟล์และเปิด start.bat ได้โดยไม่ต้องติดตั้ง Node.js เพิ่ม
