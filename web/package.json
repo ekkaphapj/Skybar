@@ -1,0 +1,31 @@
+{
+  "name": "cottage-skybar-pos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Cottage Sky Bar / Mini Mart POS - Cloudflare Workers + D1 web edition",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "node scripts/version-assets.mjs && wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply cottage-skybar-pos-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cottage-skybar-pos-db --remote",
+    "test": "node test/api.test.mjs",
+    "test:logic": "node test/logic.test.mjs",
+    "test:regression": "node test/regression.test.mjs",
+    "test:frontend": "node test/frontend.test.mjs",
+    "test:orders": "node test/orders.test.mjs",
+    "test:receipt": "node test/receipt.test.mjs",
+    "test:print-agent": "node test/print-agent.test.mjs",
+    "test:auth": "node test/auth.test.mjs",
+    "test:restaurant": "node test/restaurant.test.mjs",
+    "test:dashboard": "node test/dashboard.test.mjs",
+    "test:login": "node test/login.test.mjs"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "wrangler": "^4.151.3"
+  },
+  "type": "module"
+}

@@ -1,0 +1,12 @@
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.review-state*/
+.review-build/
+.review-logs/
+.review-*.jsonc
+.backups/
+.review-auth-state/

@@ -1,0 +1,24 @@
+import assert from "node:assert/strict";
+await import("../public/receipt.js");
+const r = globalThis.Receipt58;
+let passed = 0;
+function check(label, fn) { fn(); passed++; console.log("  ok    " + label); }
+check("long bill IDs wrap without dropping characters", () => { const text = '22451222102026-3c8ac779-501c-4141-aaef-987654321012'; assert.equal(r.wrapText(text, 14, s => s.length).join(''), text); });
+check("Thai combining marks stay with their grapheme", () => { const text = 'เครื่องดื่มน้ำผึ้งมะนาว'; const lines = r.wrapText(text, 5, s => Array.from(s).length); assert.equal(lines.join(''), text); assert.ok(lines.every(line => !/^[\u0e31\u0e34-\u0e3a\u0e47-\u0e4e]/.test(line))); });
+check("control characters cannot inject printer commands into labels", () => assert.equal(r.clean('ABC\u001b@\nD'), 'ABC @ D'));
+const rgba = new Uint8ClampedArray(384 * 195 * 4).fill(255);
+rgba.set([0, 0, 0, 255], 0); rgba.set([0, 0, 0, 255], 7 * 4); rgba.set([0, 0, 0, 0], 8 * 4);
+const packed = r.packRaster(rgba, 384, 195);
+check("384-dot 58mm image packs to 48 bytes per row", () => assert.equal(packed.length, 48 * 195));
+check("leftmost and eighth pixels use ESC/POS bit order", () => assert.equal(packed[0], 129));
+check("transparent pixels remain paper-white", () => assert.equal(packed[1], 0));
+const bytes = r.escpos(packed, 384, 195);
+check("raster header contains 48 bytes and 96 rows", () => assert.deepEqual(Array.from(bytes.slice(5, 13)), [29,118,48,0,48,0,96,0]));
+check("long receipts split into memory-safe bands", () => { const second = 13 + 48 * 96; assert.deepEqual(Array.from(bytes.slice(second, second + 8)), [29,118,48,0,48,0,96,0]); const third = second + 8 + 48 * 96; assert.deepEqual(Array.from(bytes.slice(third, third + 8)), [29,118,48,0,48,0,3,0]); });
+check("manual cutter printers receive a feed, not an unsupported cut", () => assert.deepEqual(Array.from(bytes.slice(-3)), [27,100,4]));
+check("automatic cutter can be enabled explicitly", () => assert.deepEqual(Array.from(r.escpos(packed,384,195,true).slice(-3)), [29,86,1]));
+check("RawBT URI round-trips the actual ESC/POS bytes", () => assert.deepEqual(Buffer.from(r.rawbtUrl(bytes).slice('rawbt:base64,'.length),'base64'), Buffer.from(bytes)));
+check("Windows hex packet round-trips raster bytes", () => assert.deepEqual(Buffer.from(r.toHex(bytes),'hex'), Buffer.from(bytes)));
+check("invalid canvas size is rejected", () => assert.throws(()=>r.packRaster(rgba,383,195), /ขนาดภาพ/));
+check("incomplete images are rejected", () => assert.throws(()=>r.escpos(new Uint8Array(2),384,100), /ข้อมูลภาพ/));
+console.log(`\n${passed} passed`);

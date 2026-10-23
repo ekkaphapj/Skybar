@@ -1,0 +1,35 @@
+# Local IDE/build output
+.vs/
+**/bin/
+**/obj/
+**/packages/
+*.user
+*.suo
+*.pfx
+*.p12
+*.pem
+*.key
+**/.wrangler/
+**/node_modules/
+
+# Credentials, local databases, exports, and temporary review environments
+**/.env
+**/.env.*
+**/.dev.vars
+**/.dev.vars.*
+**/.backups/
+**/.review-*/
+**/.review-*.jsonc
+*.mdb
+*.accdb
+*.ldb
+*.sqlite
+*.sqlite3
+*.db
+*.log
+*.zip
+!web/public/downloads/cottage-print-agent.zip
+
+# QA screenshots can contain live customer/order information
+web/docs/*.png
+web/docs/*.jpg

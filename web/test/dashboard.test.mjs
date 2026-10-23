@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+const base=process.env.BASE_URL||'http://127.0.0.1:8795';assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname));
+let count=0;const check=(label,value)=>{assert.ok(value,label);count++;console.log('  ok    '+label);};
+check('dashboard requires login',(await fetch(base+'/api/dashboard')).status===401);
+const r=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:'1234'})});assert.equal(r.status,200);const cookie=r.headers.get('set-cookie').split(';')[0];
+const get=async p=>{const r=await fetch(base+p,{headers:{Cookie:cookie}});assert.equal(r.status,200);return r.json();};
+const [d,meta,backup]=await Promise.all([get('/api/dashboard'),get('/api/meta'),get('/api/export')]);
+const sales=backup.tables.Sell.filter(s=>s.Date1===meta.today);const total=sales.reduce((sum,s)=>sum+s.Price,0);const bills=new Set(sales.filter(s=>s.OrderID!==null).map(s=>s.OrderID));
+check('dashboard uses Bangkok business date',d.date===meta.today);
+check('net revenue matches stored sale lines including discounts',Math.abs(d.revenue-total)<.005);
+check('bill count is distinct receipt IDs',d.bills===bills.size);
+check('hourly totals reconcile with daily revenue',Math.abs(d.hourly.reduce((n,h)=>n+h.total,0)-d.revenue)<.005);
+check('hourly bins contain actual clock hours',d.hourly.every(h=>Number.isInteger(h.hour)&&h.hour>=0&&h.hour<24));
+check('popular menu is bounded to four items',d.popular.length<=4);
+const byItem=new Map();for(const s of sales){const item=backup.tables.Items.find(i=>i.ID===s.ItemID);const type=backup.tables.ItemType.find(t=>t.ID===item.ItemTypeID);if(type.Name1==='ส่วนลด')continue;const prior=byItem.get(s.ItemID)||{qty:0,total:0,name:item.Name1};prior.qty+=s.Amount;prior.total+=s.Price;byItem.set(s.ItemID,prior);}
+check('popular quantities and revenue come from real sales',d.popular.every(p=>[...byItem.values()].some(i=>i.name===p.name&&i.qty===p.qty&&Math.abs(i.total-p.total)<.005)));
+check('popular items are ranked by quantity',d.popular.every((p,i)=>!i||d.popular[i-1].qty>=p.qty));
+check('update timestamp is valid',Number.isFinite(Date.parse(d.updatedAt)));
+check('summary endpoint does not mutate business data',JSON.stringify(backup.tables)===JSON.stringify((await get('/api/export')).tables));
+console.log('\n'+count+' dashboard checks passed');

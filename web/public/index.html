@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#183e36">
+<title>The Cottage Sky Bar POS</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="stylesheet" href="/style.css?v=997d0aeeddb6">
+<link rel="stylesheet" href="/restaurant.css?v=ae51637cdae1">
+</head>
+<body>
+<aside id="app-sidebar" class="app-sidebar hidden" aria-label="เมนูหลัก">
+  <a class="sidebar-brand" href="#/main"><img src="/logo.png" alt="The Cottage Sky Bar"><span>THE COTTAGE<small>SKY BAR · POINT OF SALE</small></span></a>
+  <span class="nav-label">พื้นที่ทำงาน</span>
+  <button class="nav-link" data-nav="main">▦ <span>ภาพรวม / โต๊ะ</span></button>
+  <button class="nav-link" data-open-sale>＋ <span>เปิดการขาย</span></button>
+  <button class="nav-link" data-nav="history">◷ <span>ประวัติการขาย</span></button>
+  <button class="nav-link" data-nav="stock">▤ <span>สต็อก / รายรับรายจ่าย</span></button>
+  <button class="nav-link" data-nav="report">▥ <span>รายงาน</span></button>
+  <span class="nav-label">จัดการร้าน</span>
+  <button class="nav-link" data-nav="additem">＋ <span>เพิ่มสินค้า</span></button>
+  <button class="nav-link" data-nav="receipt">⌕ <span>ค้นหาใบเสร็จ</span></button>
+  <button class="nav-link" data-nav="voucher">◇ <span>Voucher</span></button>
+  <button class="nav-link" data-nav="cash">฿ <span>ตัดจ่ายเงินสด</span></button>
+  <button class="nav-link" data-printer-settings>⚙ <span>ตั้งค่าการพิมพ์</span></button>
+  <button class="nav-link hidden" data-nav="users" data-admin-only>♙ <span>จัดการพนักงาน</span></button>
+  <div class="current-user" id="sidebar-user"></div>
+  <button class="nav-link" id="sidebar-logout">↪ <span>ออกจากระบบ</span></button>
+  <div class="sidebar-footer">THE COTTAGE HOTEL<small>Udon Thani · Thailand</small></div>
+</aside>
+<nav id="mobile-nav" class="mobile-nav hidden" aria-label="เมนูมือถือ">
+  <button data-nav="main"><span>▦</span>โต๊ะ</button>
+  <button data-open-sale><span>＋</span>เปิดขาย</button>
+  <button data-nav="history"><span>◷</span>ประวัติ</button>
+  <button data-nav="report"><span>▥</span>รายงาน</button>
+  <button data-printer-settings><span>⚙</span>พิมพ์</button>
+</nav>
+
+<!-- ============ ACCOUNT LOGIN ============ -->
+<section id="view-login" class="view hidden">
+  <form class="login-box card" id="login-card">
+    <img class="brand-logo login-logo" src="/logo.png" alt="The Cottage Sky Bar" width="3333" height="2917">
+    <h1>The Cottage Sky Bar</h1>
+    <p>ระบบขายหน้าร้าน — กรุณาเข้าสู่ระบบ</p>
+    <label class="field"><span>ชื่อผู้ใช้</span><input type="text" name="username" id="username-input" placeholder="ชื่อผู้ใช้" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text" enterkeyhint="next" maxlength="40" required></label>
+    <label class="field"><span>รหัสผ่าน</span><input type="password" name="password" id="pin-input" placeholder="รหัสผ่าน" autocomplete="current-password" enterkeyhint="go" maxlength="128" required></label>
+    <div id="login-keyboard" class="login-keyboard">
+      <div class="login-keyboard-heading"><span id="login-keyboard-title">แป้นพิมพ์ชื่อผู้ใช้</span><button type="button" id="login-layout-toggle">123</button></div>
+      <div class="keypad alpha" id="pin-keypad"></div>
+      <div class="login-keyboard-actions"><button type="button" data-login-key="clear">ล้างช่องนี้</button><button type="button" data-login-key="back" aria-label="ลบตัวอักษรก่อนหน้า">⌫</button><button type="button" id="login-keyboard-next">ถัดไป → รหัสผ่าน</button></div>
+    </div>
+    <button type="submit" class="btn primary big" id="login-btn">เข้าสู่ระบบ</button>
+    <p id="login-error" class="error"></p>
+    <p class="hint">เข้าสู่ระบบด้วยบัญชีของคุณ ระบบจะบันทึกชื่อผู้ทำรายการให้อัตโนมัติ</p>
+  </form>
+</section>
+
+
+<section id="view-users" class="view hidden">
+  <header class="main-header"><div><p class="eyebrow">ADMINISTRATION</p><h1>จัดการพนักงาน</h1><p class="header-caption">เพิ่มบัญชี กำหนดรหัสผ่าน และเปิด–ปิดการใช้งาน</p></div><button class="btn" data-nav="main">← กลับหน้าหลัก</button></header>
+  <form id="staff-form" class="card staff-form">
+    <h3>เพิ่มพนักงาน</h3>
+    <label class="field"><span>ชื่อพนักงานที่แสดงในรายการ</span><input id="staff-name" required maxlength="80" placeholder="เช่น เอก" autocomplete="off"></label>
+    <label class="field"><span>ชื่อผู้ใช้สำหรับเข้าสู่ระบบ</span><input id="staff-username" required maxlength="40" pattern="[a-zA-Z0-9_.\-]+" placeholder="เช่น ek" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+    <label class="field"><span>รหัสผ่าน (อย่างน้อย 4 ตัวอักษร)</span><input id="staff-password" type="password" required minlength="4" maxlength="128" autocomplete="new-password"></label>
+    <button class="btn primary" type="submit" id="staff-create">เพิ่มพนักงาน</button>
+    <p id="staff-error" class="error" role="status"></p>
+  </form>
+  <div class="card"><h3>บัญชีผู้ใช้</h3><div id="staff-list" class="staff-list"></div></div>
+</section>
+<dialog id="staff-edit-dialog" class="customer-dialog">
+  <form id="staff-edit-form" class="card">
+    <h3>แก้ไขผู้ใช้ <span id="staff-edit-username"></span></h3>
+    <input type="hidden" id="staff-edit-id">
+    <label class="field"><span>ชื่อที่แสดงในรายการ</span><input id="staff-edit-name" required maxlength="80"></label>
+    <label class="field"><span>รหัสผ่านใหม่ (เว้นว่างเพื่อใช้รหัสเดิม)</span><input id="staff-edit-password" type="password" minlength="4" maxlength="128" autocomplete="new-password"></label>
+    <label class="staff-active"><input id="staff-edit-active" type="checkbox"> เปิดใช้งานบัญชี</label>
+    <p class="hint">เมื่อบันทึก ผู้ใช้นี้จะต้องเข้าสู่ระบบใหม่</p><p id="staff-edit-error" class="error" role="status"></p>
+    <div class="row"><button class="btn primary" type="submit">บันทึก</button><button class="btn" type="button" id="staff-edit-cancel">ยกเลิก</button></div>
+  </form>
+</dialog>
+
+<!-- ============ MAIN MENU ============ -->
+<section id="view-main" class="view hidden">
+  <header class="main-header">
+    <div><p class="eyebrow">THE COTTAGE SKY BAR</p><h1>พร้อมดูแลทุกโต๊ะ</h1><p class="header-caption">เปิดโต๊ะ รับออร์เดอร์ และเช็คบิลในที่เดียว</p></div>
+    <div class="header-account"><div class="desktop-view-switch" role="group" aria-label="มุมมองบนคอม"><button type="button" data-desktop-view="scene" aria-pressed="true">◈ ร้านจำลอง 3 มิติ</button><button type="button" data-desktop-view="list" aria-pressed="false">▦ มุมมองรายการ</button></div><span id="current-user-name" class="user-badge"></span><div id="clock" class="clock"></div></div>
+  </header>
+
+  <section id="restaurant-dashboard" aria-label="ภาพรวมร้านจำลอง">
+    <div class="room-kpis">
+      <article class="room-kpi kpi-sales"><span class="kpi-icon">฿</span><div><span>ยอดขายวันนี้</span><strong id="scene-revenue">—</strong><small>บาท · <span id="scene-business-date">กำลังโหลด</span></small></div><span class="kpi-spark" aria-hidden="true">✦</span></article>
+      <article class="room-kpi"><span class="kpi-icon green">▦</span><div><span>กำลังให้บริการ</span><strong><span id="scene-active">0</span><em> / 20 โต๊ะ</em></strong><small id="scene-free">กำลังโหลดสถานะโต๊ะ</small></div></article>
+      <article class="room-kpi"><span class="kpi-icon peach">◷</span><div><span>ยอดรอเช็คบิล</span><strong id="scene-pending">0.00</strong><small>บาท · จากโต๊ะที่เปิดอยู่</small></div></article>
+      <article class="room-kpi"><span class="kpi-icon purple">▤</span><div><span>บิลสำเร็จวันนี้</span><strong id="scene-bills">—</strong><small>บิล · รวมทุกช่องทางชำระ</small></div></article>
+    </div>
+    <div class="room-workspace">
+      <div class="room-map-card">
+        <header class="room-map-heading"><div><p class="eyebrow">A LITTLE WORLD, YOUR RESTAURANT</p><h2>วันนี้ที่เดอะคอทเทจ <span>✦</span></h2></div><button class="btn room-refresh" id="scene-refresh">↻ รีเฟรช</button></header>
+        <div class="room-toolbar"><div class="room-filters" role="group" aria-label="แสดงโต๊ะ"><button data-room-filter="all" aria-pressed="true">ทั้งหมด</button><button data-room-filter="busy" aria-pressed="false">กำลังขาย <b id="scene-busy-count">0</b></button><button data-room-filter="free" aria-pressed="false">โต๊ะว่าง</button></div><label class="room-shop"><span>ร้าน</span><select id="scene-shop"><option value="0">Sky Bar</option><option value="1">Mini Mart</option></select></label></div>
+        <div class="room-stage" id="scene-map"></div>
+        <footer class="room-map-footer"><div><span class="legend-dot free"></span>โต๊ะว่าง <span class="legend-dot busy"></span>กำลังขาย <span class="legend-dot selected"></span>เลือกอยู่</div><span>ผังจำลอง · คลิกโต๊ะเพื่อรับออร์เดอร์</span></footer>
+      </div>
+      <aside class="room-detail-column"><section class="room-selected-card" id="scene-selected" aria-live="polite"></section><section class="room-activity-card"><header><h3>ออร์เดอร์ที่เปิดอยู่</h3><span id="scene-item-count" class="badge">0 รายการ</span></header><div id="scene-activity"></div></section></aside>
+    </div>
+    <div class="room-bottom"><section class="room-chart-card"><header><div><p class="eyebrow">TODAY'S SALES</p><h3>จังหวะของร้านวันนี้</h3></div><span class="hint">ยอดขายทุก 2 ชั่วโมง · บาท</span></header><div id="scene-chart" class="room-chart"></div><p id="scene-update" class="room-update" role="status">กำลังโหลดข้อมูลจากระบบ…</p></section><section class="room-popular-card"><header><p class="eyebrow">ON THE MENU</p><h3>เมนูขายดีวันนี้ <span>♨</span></h3></header><div id="scene-popular"></div></section></div>
+  </section>
+
+  <div class="dashboard-summary">
+    <div><span>กำลังให้บริการ</span><strong id="summary-active">0 <small>โต๊ะ</small></strong></div>
+    <div><span>โต๊ะว่าง</span><strong id="summary-free">20 <small>โต๊ะ</small></strong></div>
+    <div><span>ยอดโต๊ะที่เปิดอยู่</span><strong id="summary-total">0.00 <small>บาท</small></strong></div>
+  </div>
+  <div class="card menu-card">
+    <label class="field">
+      <span>เลือกร้าน</span>
+      <select id="shop-type">
+        <option value="0">THE COTTAGE SKY BAR</option>
+        <option value="1">THE COTTAGE MINI MART</option>
+      </select>
+    </label>
+    <div class="menu-grid">
+      <button class="btn primary big open-sale-button" data-nav="sell">＋ เปิดการขาย</button>
+      <button class="btn big" data-nav="history">🗂️ ประวัติการขาย</button>
+      <button class="btn big" data-nav="stock">📦 สต็อก / รายรับรายจ่าย</button>
+      <button class="btn big" data-nav="additem">➕ เพิ่มสินค้า</button>
+      <button class="btn big" data-nav="report">📊 รายงาน</button>
+      <button class="btn big" data-nav="receipt">🔍 ค้นหาใบเสร็จ</button>
+      <button class="btn big" data-nav="voucher">🎟️ Voucher</button>
+      <button class="btn big" data-nav="cash">💵 ตัดจ่ายเงินสด</button>
+    </div>
+    <button class="btn hidden" data-admin-only data-nav="users">♙ จัดการพนักงาน</button>
+    <div class="menu-row">
+      <button class="btn" id="btn-export" data-admin-only>⬇️ สำรองข้อมูล (ดาวน์โหลด)</button>
+      <label class="btn" for="import-file" data-admin-only>⬆️ นำเข้าข้อมูลสำรอง</label>
+      <input type="file" id="import-file" accept=".json" class="hidden">
+      <button class="btn danger-outline hidden" id="btn-logout">ออกจากระบบ</button>
+    </div>
+    <p class="hint" id="import-status"></p>
+  </div>
+  <div class="card active-tables-card">
+    <div class="row table-heading"><h3>โต๊ะที่กำลังมีการขาย <span id="active-table-count" class="badge">0 โต๊ะ</span></h3><button class="btn" id="btn-refresh-tables">↻ รีเฟรช</button></div>
+    <p class="hint">เลือกโต๊ะเพื่อดูหรือเพิ่มรายการ ปิดหน้ารายการได้โดยโต๊ะยังเปิดอยู่</p>
+    <div id="active-tables" class="table-grid" aria-live="polite"></div>
+  </div>
+  <details class="card printer-card" id="printer-settings">
+    <summary><span>⚙ ตั้งค่าการพิมพ์ใบเสร็จ</span><small>USB บนคอม · Bluetooth บน Android</small></summary>
+    <div class="printer-settings-body">
+    <div class="row">
+      <label class="field grow"><span>พิมพ์ด้วย</span><select id="pr-mode"><option value="usb">USB thermal · Windows PC</option><option value="android">Bluetooth · Android / RawBT</option><option value="browser">เบราว์เซอร์ / PDF</option></select></label>
+    </div>
+    <div class="row">
+      <span id="pr-status" class="badge">กำลังตรวจสอบ…</span>
+      <label class="field grow" id="pr-printer-wrap"><span>เครื่องพิมพ์ thermal</span>
+        <select id="pr-printer"><option value="">— ไม่พบโปรแกรมช่วยพิมพ์ —</option></select>
+      </label>
+      <label class="field"><span>กระดาษ</span>
+        <select id="pr-width"><option value="58">58mm</option><option value="80">80mm</option></select>
+      </label>
+      <button class="btn" id="btn-test-print">ทดสอบพิมพ์</button>
+      <button class="btn" id="btn-preview-print">ดูตัวอย่าง 58 มม.</button>
+    </div>
+    <div class="setup-help" id="pr-usb-help"><strong>USB บน Windows</strong><p>ต่อเครื่อง thermal และเปิด print-agent จากนั้นเลือกเครื่องพิมพ์และกดทดสอบ ใบเสร็จภาษาไทยพิมพ์เป็นภาพเพื่อให้สระและวรรณยุกต์อยู่ครบ</p><a class="text-link" href="/downloads/cottage-print-agent.zip" download>ดาวน์โหลด print-agent สำหรับ Windows</a><p class="hint">แตก ZIP แล้วเปิด start.bat ใช้ Chrome หรือ Edge และอนุญาตการเข้าถึงเครือข่ายภายในเมื่อเบราว์เซอร์ถาม</p></div>
+    <div class="setup-help hidden" id="pr-android-help"><strong>Bluetooth บน Android</strong><ol><li><a class="text-link" href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" target="_blank" rel="noopener">ติดตั้ง RawBT จาก Google Play</a></li><li>จับคู่เครื่องพิมพ์ใน Bluetooth ของมือถือ แล้วเลือกเครื่องใน RawBT ตั้งกระดาษ 58 มม.</li><li>เปิดเว็บด้วย Chrome แล้วกด “เปิด RawBT เพื่อพิมพ์” หลังเช็คบิล</li></ol><p class="hint">RawBT เป็นแอปภายนอก การส่งไปแอปยังไม่ยืนยันว่ากระดาษออก กรุณาทดสอบกับเครื่องจริงก่อนรับลูกค้า</p></div>
+    <div class="setup-help hidden" id="pr-browser-help">เลือกกระดาษ 58 มม. ระยะขอบ 0 และขนาดจริง 100% ในหน้าต่างพิมพ์ ปิดหัวและท้ายกระดาษของเบราว์เซอร์</div>
+    </div>
+  </details>
+</section>
+
+<!-- ============ SELL (POS) ============ -->
+<section id="view-sell" class="view hidden">
+  <header class="page-header">
+    <button class="btn back" id="btn-close-order">← ปิดหน้ารายการ / กลับหน้าหลัก</button>
+    <div>
+      <div id="sell-shopname" class="page-title"></div>
+      <div id="sell-cusname" class="page-subtitle"></div>
+    </div>
+  </header>
+
+  <div class="sell-grid">
+    <div class="card product-card">
+      <div class="section-heading"><span class="eyebrow">รับออร์เดอร์</span><h2>เพิ่มรายการอาหารและเครื่องดื่ม</h2></div>
+<div class="desktop-food-menu" id="desktop-food-menu"><div class="food-menu-top"><h3>เลือกเมนูอร่อย <span>♨</span></h3><label><span class="sr-only">ค้นหาเมนู</span><input id="food-search" placeholder="ค้นหาอาหาร / เครื่องดื่ม…" type="search"></label></div><div id="food-categories" class="food-categories"></div><div id="food-tiles" class="food-tiles"></div><p class="hint">แตะเมนูเพื่อเพิ่มครั้งละ 1 · สแกนบาร์โค้ดหรือเพิ่มส่วนลดได้ด้านล่าง</p></div>
+      <div class="row">
+        <label class="field grow"><span>ผู้ขาย</span>
+          <select id="sell-seller"></select>
+        </label>
+        <span id="order-save-status" class="hint" role="status"></span>
+        <button class="btn" id="btn-reload-order">โหลดโต๊ะใหม่</button>
+      </div>
+      <div class="row">
+        <label class="field grow"><span>เลขบิล</span>
+          <input id="sell-billid" readonly>
+        </label>
+      </div>
+      <hr>
+      <div class="row">
+        <label class="field grow"><span>รหัสสินค้า (สแกนบาร์โค้ด แล้วกด Enter)</span>
+          <input id="sell-barcode" inputmode="numeric" autocomplete="off">
+        </label>
+      </div>
+      <div class="row">
+        <label class="field grow"><span>ประเภทสินค้า</span>
+          <select id="sell-type"></select>
+        </label>
+        <label class="field grow"><span>สินค้า</span>
+          <select id="sell-item"></select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="field"><span>จำนวน</span>
+          <select id="sell-qty"></select>
+        </label>
+        <label class="field"><span>ราคา/หน่วย</span>
+          <input id="sell-price" readonly>
+        </label>
+        <label class="field"><span>คงเหลือ</span>
+          <input id="sell-remain" readonly>
+        </label>
+        <button class="btn primary" id="btn-add-item">เพิ่ม</button>
+      </div>
+    </div>
+
+    <div class="card order-card" id="order-card">
+      <h3>รายการที่ขาย <span id="sell-count" class="badge">0 รายการ</span></h3>
+      <table class="tbl" id="sell-cart">
+        <thead><tr><th>รายการ</th><th>จำนวน</th><th>ยอดเงิน</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="total-row">รวมทั้งสิ้น: <b id="sell-total">0.00</b> บาท</div>
+      <div class="row pay-row">
+        <label class="field grow"><span>ชำระโดย</span>
+          <select id="sell-payment">
+            <option>เงินสด</option><option>โอน</option><option>อื่นๆ</option><option>Voucher</option>
+          </select>
+        </label>
+        <label class="field" id="wrap-received"><span>รับเงินมา</span>
+          <input id="sell-received" inputmode="decimal">
+        </label>
+        <label class="field" id="wrap-change"><span>เงินทอน</span>
+          <input id="sell-change" readonly>
+        </label>
+        <label class="field hidden" id="wrap-voucher"><span>รหัส Voucher</span>
+          <input id="sell-voucher" inputmode="numeric">
+        </label>
+        <button class="btn hidden" id="btn-check-voucher">ตรวจสอบคูปอง</button>
+      </div>
+      <div class="row">
+        <label class="field" id="wrap-room"><span>เลขห้องพัก</span>
+          <input id="sell-room" inputmode="numeric">
+        </label>
+        <label class="field grow" id="wrap-cus"><span>ชื่อลูกค้า</span>
+          <input id="sell-cus">
+        </label>
+      </div>
+      <div class="row actions checkout-actions">
+        <button class="btn primary big" id="btn-save-sell">💵 ปิดการขาย/เช็คบิล</button>
+        <button class="btn big" id="btn-print-bill">🖨️ พิมพ์บิล</button>
+        <button class="btn big" id="btn-reset-sell">ล้างรายการในโต๊ะ</button>
+      </div>
+      <p class="hint">วันที่ธุรกิจวันนี้: <b id="sell-bizdate"></b> (ก่อนเวลา 02:00 น. ถือเป็นวันก่อนหน้า)</p>
+    </div>
+  </div>
+  <button class="mobile-order-total" id="btn-mobile-order"><span>ดูรายการ / ชำระเงิน</span><strong><span id="mobile-order-total">0.00</span> บาท ↑</strong></button>
+</section>
+
+<!-- ============ SALE HISTORY ============ -->
+<section id="view-history" class="view hidden">
+  <header class="page-header"><button class="btn back" data-nav="main">← กลับ</button><div class="page-title">🗂️ ประวัติการขาย</div></header>
+  <div class="card">
+    <div class="row">
+      <label class="field"><span>จากวันที่</span><input type="date" id="history-from"></label>
+      <label class="field"><span>ถึงวันที่</span><input type="date" id="history-to"></label>
+      <button class="btn primary" id="btn-history-search">ค้นหา</button>
+      <button class="btn" id="btn-history-all">ดูทั้งหมด</button>
+    </div>
+    <div class="table-scroll"><table class="tbl"><thead><tr><th>โต๊ะ</th><th>ลูกค้า</th><th>วันที่เช็คบิล</th><th>ผู้เช็คบิล</th><th>ชำระโดย</th><th>ยอดเงิน</th><th></th></tr></thead><tbody id="history-rows"></tbody></table></div>
+    <p class="hint" id="history-empty"></p>
+    <div class="row"><button class="btn" id="btn-history-prev">← ก่อนหน้า</button><span id="history-page" class="hint"></span><button class="btn" id="btn-history-next">ถัดไป →</button></div>
+  </div>
+</section>
+
+<!-- ============ STOCK ============ -->
+<section id="view-stock" class="view hidden">
+  <header class="page-header">
+    <button class="btn back" data-nav="main">← กลับ</button>
+    <div class="page-title">📦 สต็อกและรายรับรายจ่าย</div>
+  </header>
+  <div class="card">
+    <div class="row">
+      <label class="field grow"><span>ประเภทสินค้า</span><select id="stock-type"></select></label>
+      <button class="btn" id="btn-load-stock">แสดงสต็อก</button>
+    </div>
+    <table class="tbl" id="stock-table">
+      <thead><tr><th>รหัส</th><th>รายการ</th><th>จำนวน</th><th>วันที่</th><th>เวลา</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h3>บันทึกรายการ</h3>
+    <div class="row">
+      <label class="field"><span>รายการ</span>
+        <select id="st-action">
+          <option value="purchase">ซื้อเพิ่ม</option>
+          <option value="expense">รายจ่ายอื่นๆ</option>
+          <option value="income">รายรับอื่นๆ</option>
+          <option value="loss">สูญหาย/ทิ้ง</option>
+        </select>
+      </label>
+      <label class="field"><span>รหัสสินค้า</span><input id="st-itemid" inputmode="numeric"></label>
+      <label class="field"><span>ชื่อสินค้า</span><input id="st-itemname" readonly></label>
+      <label class="field"><span>จำนวน</span><input id="st-amount" inputmode="numeric"></label>
+    </div>
+    <div class="row">
+      <label class="field"><span id="st-price-label">ราคา (บาท)</span><input id="st-price" inputmode="decimal"></label>
+      <label class="field"><span>วิธีชำระ</span>
+        <select id="st-payment"><option>โอน</option><option>เงินสด</option><option>อื่นๆ</option></select>
+      </label>
+      <label class="field"><span>วันที่ทำรายการ</span><input type="date" id="st-date"></label>
+      <label class="field"><span>สถานที่</span><input id="st-place"></label>
+    </div>
+    <div class="row">
+      <label class="field grow"><span>หมายเหตุ / รายการ</span><input id="st-comment"></label>
+      <label class="field"><span>ผู้บันทึก</span><select id="st-owner"></select></label>
+      <button class="btn primary big" id="btn-save-stock">💾 บันทึก</button>
+      <button class="btn big" data-nav="cash">💵 ตัดจ่ายเงินสด</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CASH DEPOSIT ============ -->
+<section id="view-cash" class="view hidden">
+  <header class="page-header">
+    <button class="btn back" data-nav="main">← กลับ</button>
+    <div class="page-title">💵 ตัดจ่ายเงินสด</div>
+  </header>
+  <div class="card narrow">
+    <div class="stat"><span>เงินสดคงเหลือ (สะสมถึงวันนี้)</span><b id="cash-total">-</b></div>
+    <label class="field"><span>จำนวนเงินที่ตัดจ่าย</span><input id="deposit-amount" inputmode="decimal"></label>
+    <div class="stat"><span>เหลือหลังตัดจ่าย</span><b id="cash-after">-</b></div>
+    <div class="row actions">
+      <button class="btn primary big" id="btn-deposit">💾 บันทึกการตัดจ่าย</button>
+      <button class="btn big" data-nav="main">กลับเมนูหลัก</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ADD ITEM ============ -->
+<section id="view-additem" class="view hidden">
+  <header class="page-header">
+    <button class="btn back" data-nav="main">← กลับ</button>
+    <div class="page-title">➕ เพิ่มสินค้าใหม่</div>
+  </header>
+  <div class="card narrow">
+    <div class="row">
+      <label class="field"><span>ประเภทสินค้า</span><select id="ai-type"></select></label>
+      <label class="field"><span>ชื่อสินค้า</span><input id="ai-name"></label>
+    </div>
+    <div class="row">
+      <label class="field"><span>รหัสสินค้า (บาร์โค้ด, เว้นว่าง = สร้างอัตโนมัติ)</span><input id="ai-id" inputmode="numeric"></label>
+      <label class="field"><span>ราคา (บาท)</span><input id="ai-price" inputmode="decimal"></label>
+    </div>
+    <div class="row">
+      <label class="field"><span>จำนวนเริ่มต้น</span><input id="ai-amount" value="0" inputmode="numeric"></label>
+      <label class="field"><span>ผู้บันทึก</span><select id="ai-owner"></select></label>
+    </div>
+    <div class="hint">หมายเหตุ: ประเภท "ส่วนลด" เป็นรายการพิเศษ — ใส่ราคาเป็นสัดส่วนที่ต้องจ่าย เช่น 0.9 = หักส่วนลด 10% ของยอดสะสม</div>
+    <div class="row actions">
+      <button class="btn primary big" id="btn-save-item">💾 บันทึกสินค้า</button>
+      <button class="btn big" id="btn-clear-item">ล้าง</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REPORT ============ -->
+<section id="view-report" class="view hidden">
+  <header class="page-header">
+    <button class="btn back" data-nav="main">← กลับ</button>
+    <div class="page-title">📊 รายงาน</div>
+  </header>
+  <div class="card">
+    <div class="row">
+      <label class="field"><span>จากวันที่</span><input type="date" id="rp-from"></label>
+      <label class="field"><span>ถึงวันที่</span><input type="date" id="rp-to"></label>
+      <button class="btn primary" id="btn-report">ดูรายงาน</button>
+      <button class="btn" id="btn-report-today">วันนี้</button>
+    </div>
+  </div>
+  <div id="report-body">
+    <div class="card">
+      <h3>สรุป</h3>
+      <div class="stat-grid">
+        <div class="stat"><span>รวมยอดขาย (ช่วงวันที่)</span><b id="rp-total-income">-</b></div>
+        <div class="stat"><span>รวมรายจ่าย (ช่วงวันที่)</span><b id="rp-total-cost">-</b></div>
+        <div class="stat"><span>กำไรเดือนนี้ (รายรับ-รายจ่าย)</span><b id="rp-profit">-</b></div>
+        <div class="stat"><span>เงินสดสะสม (ถึงวันสุดท้าย)</span><b id="rp-cash-cum">-</b></div>
+        <div class="stat"><span>รายรับเงินสด (Account)</span><b id="rp-cash-in">-</b></div>
+        <div class="stat"><span>รายรับโอน (Account)</span><b id="rp-transfer-in">-</b></div>
+        <div class="stat"><span>ยอดขายเงินสด (Sell)</span><b id="rp-sell-cash">-</b></div>
+        <div class="stat"><span>ยอดขายโอน (Sell)</span><b id="rp-sell-transfer">-</b></div>
+        <div class="stat"><span id="rp-month-label">เดือน</span><b id="rp-month-sell">-</b></div>
+        <div class="stat"><span id="rp-month-label2">เดือน (รายจ่าย)</span><b id="rp-month-cost">-</b></div>
+      </div>
+      <p class="hint" id="rp-voucher-stats"></p>
+    </div>
+    <div class="card"><h3>ยอดขายตามสินค้า</h3>
+      <table class="tbl" id="rp-sell-table"><thead><tr><th>สินค้า</th><th>จำนวน</th><th>ยอดเงิน</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card"><h3>รายรับรายจ่าย</h3>
+      <table class="tbl" id="rp-cost-table"><thead><tr><th>รายการ</th><th>ยอดเงิน</th><th>ช่องทาง</th><th>วันที่</th><th>โดย</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card"><h3>ธุรกรรมเงินสด</h3>
+      <table class="tbl" id="rp-cash-table"><thead><tr><th>ประเภท</th><th>ยอด</th><th>รายการ</th><th>วันที่</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card"><h3>สต็อกคงเหลือ</h3>
+      <table class="tbl" id="rp-stock-table"><thead><tr><th>ชื่อสินค้า</th><th>จำนวน</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECEIPT LOOKUP ============ -->
+<section id="view-receipt" class="view hidden">
+  <header class="page-header">
+    <button class="btn back" data-nav="main">← กลับ</button>
+    <div class="page-title">🔍 ค้นหาใบเสร็จ</div>
+  </header>
+  <div class="card">
+    <div class="row">
+      <label class="field grow"><span>เลขบิล</span><input id="rc-bill"></label>
+      <button class="btn primary" id="btn-find-receipt">ค้นหา</button>
+      <button class="btn" id="btn-print-found">🖨️ พิมพ์ใบเสร็จ</button>
+    </div>
+    <table class="tbl" id="rc-table">
+      <thead><tr><th>รายการ</th><th>จำนวน</th><th>ยอดเงิน</th><th>วันที่</th><th>เวลา</th><th>บันทึกโดย</th><th>ชำระโดย</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="total-row">รวม: <b id="rc-total">-</b> บาท</div>
+  </div>
+</section>
+
+<!-- ============ VOUCHER ============ -->
+<section id="view-voucher" class="view hidden">
+  <header class="page-header">
+    <button class="btn back" data-nav="main">← กลับ</button>
+    <div class="page-title">🎟️ Voucher</div>
+  </header>
+  <div class="card">
+    <h3>ตรวจสอบ Voucher</h3>
+    <div class="row">
+      <label class="field grow"><span>เลข Voucher</span><input id="vc-check" inputmode="numeric"></label>
+      <button class="btn primary" id="btn-check-vc">ตรวจสอบ</button>
+    </div>
+    <p class="hint" id="vc-check-result"></p>
+  </div>
+  <div class="card">
+    <h3>สร้าง Voucher (แจกลูกค้า)</h3>
+    <div class="row">
+      <label class="field"><span>วันที่ใช้ได้</span><input type="date" id="vc-date"></label>
+      <label class="field"><span>จำนวนที่สร้าง</span><input id="vc-count" value="10" inputmode="numeric"></label>
+      <button class="btn primary" id="btn-gen-vc">สร้าง</button>
+    </div>
+    <p class="hint" id="vc-gen-result"></p>
+    <table class="tbl" id="vc-table"><thead><tr><th>เลข Voucher</th><th>วันที่</th><th>สถานะ</th></tr></thead><tbody></tbody></table>
+  </div>
+</section>
+
+<!-- ============ CUSTOMER NAME MODAL (Sky Bar) ============ -->
+<dialog id="cus-overlay" class="customer-dialog" aria-labelledby="cus-title">
+  <form class="card narrow login-box" id="cus-card">
+    <h3 id="cus-title">เปิดการขาย</h3>
+    <label class="field"><span>เบอร์โต๊ะ</span><select id="cus-table" aria-label="เบอร์โต๊ะ" required></select></label>
+    <label class="field"><span>ชื่อลูกค้า (ไม่จำเป็น)</span>
+    <input type="text" inputmode="text" id="cus-input" name="customerName" aria-label="ชื่อลูกค้า" placeholder="ชื่อลูกค้า (ไม่จำเป็น)" maxlength="200" autocomplete="off">
+    </label>
+    <div class="row actions">
+      <button type="submit" class="btn primary big" id="btn-cus-ok">เปิดการขาย</button>
+      <button type="button" class="btn big" id="btn-cus-cancel">ยกเลิก</button>
+    </div>
+    <p class="error hidden" id="cus-error">เลือกเบอร์โต๊ะ 1–20</p>
+  </form>
+</dialog>
+
+<!-- ============ RECEIPT PRINT MODAL ============ -->
+<dialog id="checkout-result" class="customer-dialog" aria-labelledby="checkout-result-title">
+  <form id="checkout-result-form" class="card narrow login-box">
+    <h3 id="checkout-result-title">เช็คบิลสำเร็จ</h3>
+    <p id="checkout-result-message"></p>
+    <button type="submit" class="btn primary big">ตกลง / กลับหน้าหลัก</button>
+  </form>
+</dialog>
+<div id="receipt-overlay" class="overlay hidden">
+  <div class="receipt-wrap">
+    <div id="receipt" class="receipt">
+      <img id="r-raster" class="receipt-raster hidden" alt="ตัวอย่างใบเสร็จ 58 มิลลิเมตร">
+      <div id="receipt-text">
+      <img class="receipt-logo" src="/logo.png" alt="The Cottage Sky Bar" width="3333" height="2917">
+      <div class="r-shop" id="r-shop">THE COTTAGE SKY BAR</div>
+      <div class="r-sub">@ The Cottage Hotel Udon Thani</div>
+      <div class="r-dash">------------------------------------------------</div>
+      <div class="r-title">RECEIPT/ใบเสร็จ</div>
+      <div class="r-line">ID: <span id="r-bill"></span></div>
+      <div class="r-line">Date: <span id="r-date"></span></div>
+      <div class="r-line">ชำระโดย: <span id="r-pay"></span></div>
+      <div class="r-line">ลูกค้า: <span id="r-cus"></span></div>
+      <div class="r-line" id="r-table-line">โต๊ะ: <span id="r-table"></span></div>
+      <div class="r-dash">------------------------------------------------</div>
+      <div class="r-cols"><span>List</span><span>Qty</span><span>Price</span></div>
+      <div class="r-dash">------------------------------------------------</div>
+      <div id="r-items"></div>
+      <div class="r-dash">------------------------------------------------</div>
+      <div class="r-total">รวม/Total : <span id="r-total"></span> บาท</div>
+      <div class="r-dash">------------------------------------------------</div>
+      <div class="r-thanks" id="r-thanks">ขอบคุณค่ะ / THANK YOU</div>
+      </div>
+    </div>
+    <div class="row actions no-print">
+      <button class="btn primary big" id="btn-print-receipt">🖨️ พิมพ์</button>
+      <button class="btn big" id="btn-close-receipt">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<dialog id="android-print" class="customer-dialog" aria-labelledby="android-print-title">
+  <form id="android-print-form" class="card login-box">
+    <span class="eyebrow">BLUETOOTH · ANDROID</span><h3 id="android-print-title">พร้อมส่งใบเสร็จไป RawBT</h3>
+    <p id="android-print-message"></p>
+    <a id="android-print-link" class="btn primary big" href="#">เปิด RawBT เพื่อพิมพ์</a>
+    <div id="android-print-downloads" class="receipt-downloads"></div>
+    <p class="hint">หาก RawBT ไม่เปิด ให้ติดตั้งแอป จับคู่ Bluetooth และเปิดเว็บด้วย Chrome ก่อน แล้วพิมพ์ซ้ำจากประวัติได้</p>
+    <button type="submit" class="btn">กลับไปยังระบบ</button>
+  </form>
+</dialog>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/receipt.js?v=86f896260c92"></script>
+<script src="/printing.js?v=5f0f2c219c8a"></script>
+<script src="/restaurant.js?v=8740682fffea"></script>
+<script src="/login.js?v=390c4faf3e40"></script>
+<script src="/app.js?v=5302251c0359"></script>
+</body>
+</html>

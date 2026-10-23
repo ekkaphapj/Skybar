@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';import{readFileSync}from'node:fs';
+const context=vm.createContext({console});vm.runInContext(readFileSync('public/restaurant.js','utf8'),context);const R=context.RestaurantView;let passed=0;
+function check(label,value){assert.ok(value,label);passed++;console.log('  ok    '+label);}
+const orders=[{id:'one',tableNo:1,cusName:'ทดสอบ "<script>"',total:84,items:[{qty:2,typeName:'อาหาร',name:'ข้าว',price:100},{qty:1,typeName:'ส่วนลด',name:'ส่วนลด',price:-16}]},{id:'three',tableNo:3,cusName:'เอก',total:20,items:[{qty:1,name:'ชา',price:20}]}];
+const m=R.model(orders,{revenue:234.5,bills:4},3);
+check('open and free tables use actual orders',m.active===2&&m.free===18);
+check('pending amount includes actual discount',m.pending===104);
+check('item quantities exclude discount rows',m.items===3);
+check('selected table is found by number',m.selected.id==='three');
+check('free table has no fake order',R.model(orders,null,2).selected===null);
+check('unavailable revenue is not presented as zero',R.model([],null).revenue===null);
+check('real zero revenue remains zero',R.model([],{revenue:0,bills:0}).revenue===0);
+check('daily revenue and bill count use server summary',m.revenue===234.5&&m.bills===4);
+const svg=R.scene(orders,1,'all');
+check('all twenty tables have unique interactive targets',(svg.match(/data-scene-table="/g)||[]).length===20&&new Set([...svg.matchAll(/id="scene-table-(\d+)"/g)].map(x=>x[1])).size===20);
+check('tables are keyboard accessible',(svg.match(/tabindex="0"/g)||[]).length===20);
+check('customer names cannot inject SVG markup',!svg.includes('<script>')&&svg.includes('&lt;script&gt;'));
+check('occupied tables display current amount',svg.includes('฿ 84.00')&&svg.includes('฿ 20.00'));
+check('one selected table is visibly marked',(svg.match(/class="scene-table is-selected/g)||[]).length===1);
+check('isometric drawing has no external resources',!svg.includes('<image')&&!svg.includes('href='));
+const busy=R.scene(orders,1,'busy');check('busy filter removes empty tables from keyboard navigation',(busy.match(/tabindex="0"/g)||[]).length===2);
+const free=R.scene(orders,2,'free');check('free filter removes occupied tables from keyboard navigation',(free.match(/tabindex="0"/g)||[]).length===18);
+check('empty restaurant retains all twenty table targets',(R.scene([],1).match(/data-scene-table="/g)||[]).length===20);
+console.log('\n'+passed+' restaurant checks passed');

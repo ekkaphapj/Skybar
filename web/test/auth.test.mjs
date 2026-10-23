@@ -1,0 +1,88 @@
+import assert from 'node:assert/strict';
+const BASE=process.env.BASE_URL||'http://127.0.0.1:8795';
+assert.ok(['localhost','127.0.0.1'].includes(new URL(BASE).hostname),'Only isolated local database');
+let count=0;
+function check(label,value){assert.ok(value,label);console.log('  ok    '+label);count++;}
+function client(){return{cookie:'',async req(method,path,body,headers={}){const r=await fetch(BASE+path,{method,headers:{'Content-Type':'application/json',Cookie:this.cookie,...headers},body:body===undefined?undefined:JSON.stringify(body)});if(r.headers.has('set-cookie'))this.cookie=r.headers.get('set-cookie').split(';')[0];return{status:r.status,data:await r.json(),headers:r.headers};}};}
+const admin=client(), staff=client(), other=client(), anonymous=client();
+const login=(c,username,password)=>c.req('POST','/api/login',{username,password});
+check('anonymous status has no identity',(await anonymous.req('GET','/api/auth/status')).data.user===null);
+check('anonymous data access rejected',(await anonymous.req('GET','/api/items')).status===401);
+check('legacy PIN no longer authenticates',(await anonymous.req('POST','/api/login',{pin:'1234'})).status===401);
+anonymous.cookie='pos_auth=legacy';check('legacy cookie no longer authenticates',(await anonymous.req('GET','/api/orders')).status===401);
+check('incorrect password rejected',(await login(anonymous,'admin','wrong')).status===401);
+check('SQL-like username rejected',(await login(anonymous,"admin' OR 1=1",'1234')).status===401);
+const logged=await login(admin,'ADMIN','1234');
+check('admin username is case-insensitive',logged.status===200&&logged.data.user.role==='admin');
+check('session cookie is HttpOnly and SameSite Strict',/HttpOnly/.test(logged.headers.get('set-cookie'))&&/SameSite=Strict/.test(logged.headers.get('set-cookie')));
+check('session is a random opaque token',/^pos_session=[a-f0-9]{64}$/.test(admin.cookie));
+check('authenticated responses cannot be cached',(await admin.req('GET','/api/users')).headers.get('cache-control')==='no-store');
+const before=(await admin.req('GET','/api/export')).data;
+const username='staff_'+Date.now(), name='พนักงานทดสอบ "<หนึ่ง>"';let userId;
+try{
+check('short password rejected',(await admin.req('POST','/api/users',{username,displayName:name,password:'12'})).status===400);
+const created=await admin.req('POST','/api/users',{username,displayName:name,password:'5678',role:'admin'});userId=created.data.id;
+check('admin can add employee',created.status===200&&userId>0);
+check('case-insensitive duplicate username rejected',(await admin.req('POST','/api/users',{username:username.toUpperCase(),displayName:'duplicate',password:'5678'})).status===409);
+const users=(await admin.req('GET','/api/users')).data;
+check('account list never exposes password hash or salt',users.every(u=>!('PasswordHash'in u)&&!('PasswordSalt'in u)));
+check('create request cannot grant admin role',users.find(u=>u.ID===userId).Role==='employee');
+const employee=await login(staff,username,'5678');
+check('employee logs in with Thai display name',employee.status===200&&employee.data.user.displayName===name);
+check('employee cannot list accounts',(await staff.req('GET','/api/users')).status===403);
+check('employee cannot add accounts',(await staff.req('POST','/api/users',{username:'fake',displayName:'fake',password:'5678'})).status===403);
+check('employee cannot reset accounts',(await staff.req('PUT','/api/users/1',{password:'0000'})).status===403);
+check('employee cannot export database',(await staff.req('GET','/api/export')).status===403);
+check('employee cannot replace database',(await staff.req('POST','/api/import',before)).status===403);
+const meta=(await staff.req('GET','/api/meta')).data;
+check('seller list contains only logged-in employee',meta.sellers.length===1&&meta.sellers[0]===name);
+check('session status restores employee identity',(await staff.req('GET','/api/auth/status')).data.user.username===username);
+const types=(await staff.req('GET','/api/item-types')).data;
+const product=await staff.req('POST','/api/items',{name:'สินค้าทดสอบผู้ขาย',itemTypeId:types.find(t=>t.Name1!=='ส่วนลด').ID,price:10,amount:20,owner:'forged admin'});
+check('employee can add product without selecting seller',product.status===200);
+const itemID=product.data.id;
+check('product owner is server-controlled',(await admin.req('GET','/api/export')).data.tables.Items.find(i=>i.ID===itemID).Owner===name);
+check('employee records stock income',(await staff.req('POST','/api/stock/transaction',{action:'income',price:100,paymentType:'เงินสด',comment:'ทดสอบผู้บันทึก',owner:'forged'})).status===200);
+const stockBackup=(await admin.req('GET','/api/export')).data.tables;
+check('income account records current employee',stockBackup.Account.at(-1).Owner===name);
+check('cash ledger records current employee',stockBackup.CASH.at(-1).Owner===name);
+check('cash withdrawal records successfully',(await staff.req('POST','/api/cash/deposit',{amount:1,owner:'forged'})).status===200);
+check('cash withdrawal owner is session identity',(await admin.req('GET','/api/export')).data.tables.CASH.at(-1).Owner===name);
+const voucher=await staff.req('POST','/api/vouchers',{count:1,owner:'forged'});
+check('voucher issuance records current employee',voucher.status===200&&(await admin.req('GET','/api/export')).data.tables.VOUCHER.find(v=>v.ID===voucher.data.ids[0]).Owner===name);
+const occupied=new Set((await staff.req('GET','/api/orders')).data.map(o=>o.tableNo));const tableNo=Array.from({length:20},(_,i)=>i+1).find(n=>!occupied.has(n));
+const opened=await staff.req('POST','/api/orders',{tableNo,owner:'forged'});
+check('opening table stamps logged-in employee',opened.status===200&&opened.data.openedBy===name&&opened.data.owner===name);
+const order=opened.data;
+const updated=await staff.req('PUT','/api/orders/'+order.id,{revision:order.revision,items:[{itemID,qty:1}],owner:'forged',cusName:'',roomNo:0});
+check('employee can save order',updated.status===200);
+check('order update cannot impersonate another seller',(await staff.req('GET','/api/orders/'+order.id)).data.owner===name);
+const closed=await admin.req('POST','/api/orders/'+order.id+'/checkout',{revision:updated.data.revision,paymentType:'เงินสด',owner:'forged'});
+check('checkout uses actual logged-in cashier',closed.status===200&&closed.data.owner==='admin');
+const history=(await admin.req('GET','/api/orders/'+order.id)).data;
+check('opener and cashier remain separately traceable',history.openedBy===name&&history.closedBy==='admin');
+const receipt=(await staff.req('GET','/api/sell/receipt/'+encodeURIComponent(order.billID))).data;
+check('stored receipt seller matches cashier',receipt.rows.every(row=>row.Owner==='admin'));
+check('cross-origin write rejected',(await staff.req('POST','/api/vouchers',{count:1},{Origin:'https://unrelated.example'})).status===403);
+await login(other,username,'5678');const oldCookie=staff.cookie;await staff.req('POST','/api/logout');staff.cookie=oldCookie;
+check('logout revokes server session',(await staff.req('GET','/api/items')).status===401);
+check('logout does not revoke other device',(await other.req('GET','/api/items')).status===200);
+check('admin can disable employee',(await admin.req('PUT','/api/users/'+userId,{active:false})).status===200);
+check('disabled employee session is revoked',(await other.req('GET','/api/items')).status===401);
+check('disabled employee cannot log in',(await login(other,username,'5678')).status===401);
+await admin.req('PUT','/api/users/'+userId,{active:true});await login(other,username,'5678');
+check('reactivated employee can log in',(await other.req('GET','/api/items')).status===200);
+await admin.req('PUT','/api/users/'+userId,{password:'9876'});
+check('password reset revokes existing sessions',(await other.req('GET','/api/items')).status===401);
+check('old password fails after reset',(await login(other,username,'5678')).status===401);
+check('new password works',(await login(other,username,'9876')).status===200);
+check('admin cannot be disabled',(await admin.req('PUT','/api/users/1',{active:false})).status===400);
+const brute=client();let last;for(let i=0;i<6;i++)last=await login(brute,'missing_'+Date.now().toString().slice(0,-5),'bad');
+check('repeated invalid login is rate-limited',last.status===429);
+}finally{
+ assert.equal((await admin.req('POST','/api/import',before)).status,200,'restore business fixture');
+ if(userId)await admin.req('PUT','/api/users/'+userId,{active:false});
+}
+console.log('\n'+count+' authentication checks passed');
+
+
