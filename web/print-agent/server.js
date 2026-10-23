@@ -3,6 +3,7 @@ const http = require("node:http");
 const { spawn } = require("node:child_process");
 const os = require("node:os"), path = require("node:path"), fs = require("node:fs"), crypto = require("node:crypto");
 const { buildEscpos } = require("./text-receipt");
+const version = require("./package.json").version;
 const cors = { "Vary": "Origin", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Private-Network": "true" };
 function json(res, code, value) { res.writeHead(code, { ...cors, "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify(value)); }
 function powershell(args, timeout = 30000) {
@@ -18,7 +19,7 @@ function powershell(args, timeout = 30000) {
 async function printerDetails() {
   const text = await powershell(["-Command", "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Printer | Select-Object Name,PortName,DriverName,PrinterStatus | ConvertTo-Json -Compress"], 12000);
   const parsed = JSON.parse(text || "[]");
-  return (Array.isArray(parsed) ? parsed : [parsed]).filter((p) => p?.Name).map((p) => ({ name: p.Name, port: p.PortName, driver: p.DriverName, status: Number(p.PrinterStatus), thermalCandidate: /pos[- _]?\d*|thermal|receipt|xprinter|gprinter|hprt|rongta|epson.*tm-|zj[- _]|generic.*text/i.test(p.Name) || /generic.*text/i.test(p.DriverName) }));
+  return (Array.isArray(parsed) ? parsed : [parsed]).filter((p) => p?.Name).map((p) => ({ name: p.Name, port: p.PortName, driver: p.DriverName, status: Number(p.PrinterStatus), thermalCandidate: /pos[- _]?\d*|thermal|receipt|xprinter|gprinter|hprt|rongta|epson.*tm-|zj[- _]|aiyin|an58[12]|generic.*text/i.test(p.Name) || /generic.*text/i.test(p.DriverName) }));
 }
 function spoolRaw(printer, file) { return powershell(["-ExecutionPolicy", "Bypass", "-File", path.join(__dirname, "rawprint.ps1"), "-PrinterName", printer, "-FilePath", file]); }
 function readBody(req) {
@@ -48,7 +49,7 @@ function createAgent({ spool = spoolRaw, getPrinters = printerDetails, jobDirect
     try {
       if (req.method === "GET" && url.pathname === "/status") {
         const details = await getPrinters();
-        return json(res, 200, { ok: true, agent: "cottage-pos-print-agent/2.0", features: { raster: true, deduplication: true }, printers: details.map((p) => p.name), printerDetails: details });
+        return json(res, 200, { ok: true, agent: "cottage-pos-print-agent/" + version, features: { raster: true, deduplication: true }, printers: details.map((p) => p.name), printerDetails: details });
       }
       if (req.method !== "POST" || url.pathname !== "/print") return json(res, 404, { error: "not found" });
       const body = JSON.parse(await readBody(req));
@@ -83,7 +84,7 @@ function createAgent({ spool = spoolRaw, getPrinters = printerDetails, jobDirect
 function start() {
   const server = createAgent(); let port = Number(process.env.PORT || 9130);
   server.on("error", (error) => { if (error.code === "EADDRINUSE" && port === 9130) { port = 9131; server.listen(port, "127.0.0.1"); } else { console.error(error.message); process.exitCode = 1; } });
-  server.on("listening", () => console.log("Cottage POS Print Agent 2.0 · http://127.0.0.1:" + port));
+  server.on("listening", () => console.log("Cottage POS Print Agent " + version + " · http://127.0.0.1:" + port));
   server.listen(port, "127.0.0.1");
   return server;
 }

@@ -70,3 +70,5 @@ test/api.test.mjs          integration tests (71 ข้อ)
 - แก้ความคลาดเคลื่อนทศนิยมของส่วนลดเดิม: 10% ของ 60 บาท ลด 6 บาท (ยังตัดส่วนลดเป็นบาทเต็มตามเดิม)
 
 ผลตรวจวันที่ 22 ตุลาคม 2026 และข้อจำกัดการย้ายข้อมูล Access: [docs/REVIEW-2026-10-22.md](docs/REVIEW-2026-10-22.md)
+
+ชุด Print Agent พร้อมใช้ Windows x64 (รวม Node.js): [ดาวน์โหลดรุ่นล่าสุด](https://github.com/ekkaphapj/Skybar/releases/latest)
