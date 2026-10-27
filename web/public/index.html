@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#183e36">
 <title>The Cottage Sky Bar POS</title>
 <link rel="icon" type="image/png" href="/logo.png">
-<link rel="stylesheet" href="/style.css?v=997d0aeeddb6">
+<link rel="stylesheet" href="/style.css?v=7ef8c947766a">
 <link rel="stylesheet" href="/restaurant.css?v=ae51637cdae1">
 </head>
 <body>
@@ -381,26 +381,28 @@
   </header>
   <div class="card">
     <div class="row">
-      <label class="field"><span>จากวันที่</span><input type="date" id="rp-from"></label>
-      <label class="field"><span>ถึงวันที่</span><input type="date" id="rp-to"></label>
+      <label class="field" id="rp-from-field" data-admin-only><span>จากวันที่</span><input type="date" id="rp-from"></label>
+      <label class="field"><span id="rp-to-label">ถึงวันที่</span><input type="date" id="rp-to"></label>
       <button class="btn primary" id="btn-report">ดูรายงาน</button>
       <button class="btn" id="btn-report-today">วันนี้</button>
+      <button class="btn report-image-button" id="btn-report-image">สร้างรายงานวันนี้</button>
     </div>
   </div>
-  <div id="report-body">
+  <p class="hint" id="report-access-note"></p>
+  <div id="report-body" class="hidden">
     <div class="card">
       <h3>สรุป</h3>
       <div class="stat-grid">
         <div class="stat"><span>รวมยอดขาย (ช่วงวันที่)</span><b id="rp-total-income">-</b></div>
         <div class="stat"><span>รวมรายจ่าย (ช่วงวันที่)</span><b id="rp-total-cost">-</b></div>
-        <div class="stat"><span>กำไรเดือนนี้ (รายรับ-รายจ่าย)</span><b id="rp-profit">-</b></div>
+        <div class="stat" data-admin-only><span>กำไรเดือนนี้ (รายรับ-รายจ่าย)</span><b id="rp-profit">-</b></div>
         <div class="stat"><span>เงินสดสะสม (ถึงวันสุดท้าย)</span><b id="rp-cash-cum">-</b></div>
         <div class="stat"><span>รายรับเงินสด (Account)</span><b id="rp-cash-in">-</b></div>
         <div class="stat"><span>รายรับโอน (Account)</span><b id="rp-transfer-in">-</b></div>
         <div class="stat"><span>ยอดขายเงินสด (Sell)</span><b id="rp-sell-cash">-</b></div>
         <div class="stat"><span>ยอดขายโอน (Sell)</span><b id="rp-sell-transfer">-</b></div>
-        <div class="stat"><span id="rp-month-label">เดือน</span><b id="rp-month-sell">-</b></div>
-        <div class="stat"><span id="rp-month-label2">เดือน (รายจ่าย)</span><b id="rp-month-cost">-</b></div>
+        <div class="stat" data-admin-only><span id="rp-month-label">เดือน</span><b id="rp-month-sell">-</b></div>
+        <div class="stat" data-admin-only><span id="rp-month-label2">เดือน (รายจ่าย)</span><b id="rp-month-cost">-</b></div>
       </div>
       <p class="hint" id="rp-voucher-stats"></p>
     </div>
@@ -408,7 +410,7 @@
       <table class="tbl" id="rp-sell-table"><thead><tr><th>สินค้า</th><th>จำนวน</th><th>ยอดเงิน</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card"><h3>รายรับรายจ่าย</h3>
-      <table class="tbl" id="rp-cost-table"><thead><tr><th>รายการ</th><th>ยอดเงิน</th><th>ช่องทาง</th><th>วันที่</th><th>โดย</th><th>จัดการ (admin)</th></tr></thead><tbody></tbody></table>
+      <table class="tbl" id="rp-cost-table"><thead><tr><th>รายการ</th><th>ยอดเงิน</th><th>ช่องทาง</th><th>วันที่</th><th>โดย</th><th data-admin-only>จัดการ (admin)</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card"><h3>ธุรกรรมเงินสด</h3>
       <table class="tbl" id="rp-cash-table"><thead><tr><th>ประเภท</th><th>ยอด</th><th>รายการ</th><th>วันที่</th></tr></thead><tbody></tbody></table>
@@ -533,12 +535,20 @@
   </form>
 </dialog>
 
+<dialog id="report-image-dialog" class="report-image-dialog" aria-labelledby="report-image-title">
+  <header><div><span class="eyebrow">DAILY SALES REPORT</span><h2 id="report-image-title">รูปสรุปการขายวันนี้</h2></div><button class="btn" id="btn-close-report-image">ปิด</button></header>
+  <p id="report-image-status" role="status"></p>
+  <div class="report-share-actions"><button class="btn report-image-button" id="btn-share-report">แชร์รูปไป LINE / แอปอื่น</button><p class="hint">กดแชร์แล้วเลือก LINE บนอุปกรณ์ที่รองรับ หรือดาวน์โหลด PNG แล้วแนบในแชต LINE</p></div>
+  <div id="report-image-preview"></div>
+</dialog>
+
 <div id="toast" class="toast hidden"></div>
 
 <script src="/receipt.js?v=86f896260c92"></script>
 <script src="/printing.js?v=5f0f2c219c8a"></script>
 <script src="/restaurant.js?v=8740682fffea"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
-<script src="/app.js?v=273757c175ef"></script>
+<script src="/report-image.js?v=47384f567771"></script>
+<script src="/app.js?v=0952ecb639e0"></script>
 </body>
 </html>

@@ -60,6 +60,7 @@ function applyIdentity(st) {
   $("sidebar-user").textContent = currentUser ? currentUser.displayName + (currentUser.role === "admin" ? " · ผู้ดูแลระบบ" : " · พนักงาน") : "";
   $("current-user-name").textContent = currentUser ? "ผู้ใช้งาน: " + currentUser.displayName : "";
   document.querySelectorAll("[data-admin-only]").forEach(el => el.classList.toggle("hidden", currentUser?.role !== "admin"));
+  resetReport();
 }
 async function loadMeta() { const st = await api("/api/auth/status"); applyIdentity(st); return st; }
 function fillSelect(sel, items, keepBlank = false) {
@@ -601,34 +602,96 @@ async function saveItem() {
 
 
 /* ---------------- report ---------------- */
+let reportIdentity = null;
+let dailyReportFiles = [];
+let dailyReportUrls = [];
+let reportGeneration = 0;
+let reportRequest = 0;
+function clearReportImages() {
+  dailyReportUrls.forEach(url => URL.revokeObjectURL(url));
+  dailyReportUrls = []; dailyReportFiles = [];
+  $("report-image-preview").innerHTML = "";
+  if ($("report-image-dialog").open) $("report-image-dialog").close();
+}
+function resetReport() {
+  reportGeneration++; reportRequest++;
+  reportIdentity = null;
+  $("rp-from").value = ""; $("rp-to").value = "";
+  $("report-body").classList.add("hidden");
+  document.querySelectorAll("#report-body b").forEach(el => { el.textContent = "-"; });
+  document.querySelectorAll("#report-body tbody").forEach(el => { el.innerHTML = ""; });
+  clearReportImages();
+}
 function initReport() {
-  if (!$("rp-from").value) {
-    $("rp-from").value = businessDate();
+  const isAdmin = currentUser?.role === "admin";
+  $("rp-from-field").classList.toggle("hidden", !isAdmin);
+  $("rp-to-label").textContent = isAdmin ? "ถึงวันที่" : "วันที่";
+  $("report-access-note").textContent = isAdmin ? "เลือกดูรายวันหรือช่วงวันที่ได้" : "เลือกดูรายงานได้ครั้งละ 1 วัน";
+  if (reportIdentity !== currentUser?.id) {
+    const today = businessDate();
+    $("rp-from").value = isAdmin ? today.slice(0, 8) + "01" : today;
     $("rp-to").value = businessDate();
+    reportIdentity = currentUser?.id;
   }
 }
 async function loadReport() {
-  const from = $("rp-from").value, to = $("rp-to").value;
+  const request = ++reportRequest;
+  const to = $("rp-to").value;
+  const from = currentUser?.role === "admin" ? $("rp-from").value : to;
   if (!from || !to || from > to) { toastErr("เลือกวันที่ไม่ถูกต้อง"); return; }
   const r = await api(`/api/report?from=${from}&to=${to}`);
+  if (request !== reportRequest) return;
   $("rp-total-income").textContent = fmt2(r.totalIncome);
   $("rp-total-cost").textContent = fmt2(r.sums.cost);
-  $("rp-profit").textContent = fmt2(r.profit);
+  $("rp-profit").textContent = r.profit === undefined ? "-" : fmt2(r.profit);
   $("rp-cash-cum").textContent = fmt2(r.totalCashCumulative);
   $("rp-cash-in").textContent = fmt2(r.sums.cashIn);
   $("rp-transfer-in").textContent = fmt2(r.sums.transferIn);
   $("rp-sell-cash").textContent = fmt2(r.sellSums.cash);
   $("rp-sell-transfer").textContent = fmt2(r.sellSums.transfer);
-  $("rp-month-label").textContent = "รายรับเดือน " + r.sums.monthLabel;
-  $("rp-month-label2").textContent = "รายจ่ายเดือน " + r.sums.monthLabel;
-  $("rp-month-sell").textContent = fmt2(r.sums.monthlySell);
-  $("rp-month-cost").textContent = fmt2(r.sums.monthlyCost);
+  $("rp-month-label").textContent = "รายรับเดือน " + (r.sums.monthLabel || "");
+  $("rp-month-label2").textContent = "รายจ่ายเดือน " + (r.sums.monthLabel || "");
+  $("rp-month-sell").textContent = r.sums.monthlySell === undefined ? "-" : fmt2(r.sums.monthlySell);
+  $("rp-month-cost").textContent = r.sums.monthlyCost === undefined ? "-" : fmt2(r.sums.monthlyCost);
+  $("report-body").classList.remove("hidden");
   $("rp-voucher-stats").textContent = `จำนวน Voucher ที่แจกทั้งหมด : ${r.voucher.issued} นำมาใช้ทั้งหมด : ${r.voucher.used}`;
 
   fillTable("rp-sell-table", r.sellByDate, (x) => [esc(x.name), num(x.qty), fmt2(x.total)]);
-  fillTable("rp-cost-table", r.costByDate, (x) => [esc(x.list), fmt2(x.amount), esc(x.paymentType), x.date, esc(x.owner), x.billID && !x.stockTransactionID ? deleteButton("data-delete-bill", x.billID, "ลบทั้งบิล") : deleteButton("data-delete-account", x.id, "ลบรายการ")]);
+  fillTable("rp-cost-table", r.costByDate, (x) => [esc(x.list), fmt2(x.amount), esc(x.paymentType), x.date, esc(x.owner), ...(currentUser?.role === "admin" ? [x.billID && !x.stockTransactionID ? deleteButton("data-delete-bill", x.billID, "ลบทั้งบิล") : deleteButton("data-delete-account", x.id, "ลบรายการ")] : [])]);
   fillTable("rp-cash-table", r.cashTx, (x) => [esc(x.type), fmt2(x.amount), esc(x.list), x.date]);
   fillTable("rp-stock-table", r.stockRemaining, (x) => [esc(x.name), num(x.amount)]);
+}
+async function createTodayReport() {
+  const button = $("btn-report-image");
+  if (button.disabled) return;
+  button.disabled = true; button.textContent = "กำลังสร้างรูป…";
+  const generation = ++reportGeneration;
+  try {
+    clearReportImages();
+    const report = await api("/api/report/today");
+    if (generation !== reportGeneration) return;
+    const files = await DailyReportImage.create(report);
+    if (generation !== reportGeneration) return;
+    dailyReportFiles = files;
+    dailyReportUrls = dailyReportFiles.map(file => URL.createObjectURL(file));
+    $("report-image-preview").innerHTML = dailyReportUrls.map((url, i) => `<figure><img src="${url}" alt="สรุปการขายประจำวันที่ ${esc(report.from)} หน้า ${i + 1}"><figcaption><a class="btn" href="${url}" download="${dailyReportFiles[i].name}">ดาวน์โหลด PNG${dailyReportFiles.length > 1 ? " หน้า " + (i + 1) : ""}</a></figcaption></figure>`).join("");
+    $("report-image-status").textContent = "รายงานวันที่ " + report.from + " · " + dailyReportFiles.length + " รูป";
+    $("report-image-dialog").showModal();
+  } catch (e) { clearReportImages(); toastErr(e.message); }
+  finally { button.disabled = false; button.textContent = "สร้างรายงานวันนี้"; }
+}
+async function shareDailyReport() {
+  if (!dailyReportFiles.length) return;
+  const button = $("btn-share-report");
+  if (button.disabled) return;
+  if (!navigator.canShare?.({ files: dailyReportFiles }) || !navigator.share) {
+    $("report-image-status").textContent = "เครื่องนี้ไม่รองรับการแชร์รูปโดยตรง กรุณาดาวน์โหลด PNG แล้วแนบรูปในแชต LINE";
+    return;
+  }
+  button.disabled = true;
+  try { await navigator.share({ files: dailyReportFiles, title: "สรุปการขาย The Cottage Sky Bar" }); }
+  catch (e) { if (e.name !== "AbortError") $("report-image-status").textContent = "แชร์รูปไม่สำเร็จ กรุณาดาวน์โหลด PNG แล้วแนบใน LINE"; }
+  finally { button.disabled = false; }
 }
 function num(n) { return `<span class="num">${n}</span>`; }
 function deleteButton(attribute, value, label) {
@@ -851,6 +914,10 @@ function wire() {
   // report
   $("btn-report").onclick = loadReport;
   $("btn-report-today").onclick = () => { $("rp-from").value = businessDate(); $("rp-to").value = businessDate(); loadReport(); };
+  $("btn-report-image").onclick = createTodayReport;
+  $("btn-share-report").onclick = shareDailyReport;
+  $("btn-close-report-image").onclick = clearReportImages;
+  $("report-image-dialog").addEventListener("cancel", clearReportImages);
 
   // receipt lookup
   $("btn-find-receipt").onclick = findReceipt;

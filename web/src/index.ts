@@ -637,22 +637,28 @@ app.delete("/api/accounts/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-app.get("/api/report", async (c) => {
-  let from = c.req.query("from");
-  let to = c.req.query("to");
+app.get("/api/report/today", (c) => report(c, true));
+app.get("/api/report", (c) => report(c));
+
+async function report(c: Context<Env>, todayOnly = false) {
+  const today = businessDate();
+  const isAdmin = c.get("user").role === "admin";
+  const from = todayOnly ? today : c.req.query("from");
+  const to = todayOnly ? today : c.req.query("to");
   if (!isValidDate(from) || !isValidDate(to)) return bad(c, "เลือกวันที่ไม่ถูกต้อง");
   if (from > to) return bad(c, "เลือกวันที่ไม่ถูกต้อง");
+  if (!isAdmin && from !== to) return bad(c, "พนักงานดูรายงานได้ครั้งละ 1 วันเท่านั้น", 403);
   const db = c.env.DB;
 
   const [stockRemaining, sellByDate, costByDate, cashTx, cashCum, sums, sellSums, voucherIssued, voucherUsed] = await Promise.all([
     db.prepare(
       `SELECT i.Name1 AS name, s.Amount AS amount FROM Stock s JOIN Items i ON s.ItemID = i.ID
-       WHERE s.Amount > -1 ORDER BY s.Amount`
-    ).all(),
+       JOIN ItemType t ON t.ID = i.ItemTypeID WHERE t.Name1 <> ? ORDER BY s.Amount, i.ID`
+    ).bind(DISCOUNT_TYPE_NAME).all(),
     db.prepare(
-      `SELECT i.Name1 AS name, SUM(s.Amount) AS qty, SUM(s.Price) AS total
-       FROM Sell s JOIN Items i ON s.ItemID = i.ID
-       WHERE s.Date1 >= ? AND s.Date1 <= ? GROUP BY i.Name1`
+      `SELECT i.Name1 AS name, t.Name1 = 'ส่วนลด' AS isDiscount, SUM(s.Amount) AS qty, SUM(s.Price) AS total
+       FROM Sell s JOIN Items i ON s.ItemID = i.ID JOIN ItemType t ON t.ID = i.ItemTypeID
+       WHERE s.Date1 >= ? AND s.Date1 <= ? GROUP BY i.ID ORDER BY i.Name1, i.ID`
     ).bind(from, to).all(),
     db.prepare(
       `SELECT ID AS id, BillID AS billID, StockTransactionID AS stockTransactionID, Type AS type,
@@ -673,16 +679,16 @@ app.get("/api/report", async (c) => {
           `SELECT SUM(Amount) AS t FROM Account WHERE Date1 >= ? AND Date1 <= ? AND Type='รายรับ' AND PaymentType='โอน'`
         ).bind(from, to).first(),
         db.prepare(`SELECT SUM(Amount) AS t FROM Account WHERE Date1 >= ? AND Date1 <= ? AND Type='รายจ่าย'`).bind(from, to).first(),
-        db.prepare(
+        isAdmin ? db.prepare(
           `SELECT SUM(Amount) AS t FROM Account WHERE strftime('%m', Date1) = ? AND strftime('%Y', Date1) = ? AND Type='รายรับ'`
         )
           .bind(from.slice(5, 7), from.slice(0, 4))
-          .first(),
-        db.prepare(
+          .first() : Promise.resolve(null),
+        isAdmin ? db.prepare(
           `SELECT SUM(Amount) AS t FROM Account WHERE strftime('%m', Date1) = ? AND strftime('%Y', Date1) = ? AND Type='รายจ่าย'`
         )
           .bind(from.slice(5, 7), from.slice(0, 4))
-          .first(),
+          .first() : Promise.resolve(null),
       ]);
       return {
         cashIn: Number(cashIn?.t ?? 0),
@@ -712,6 +718,11 @@ app.get("/api/report", async (c) => {
   return c.json({
     from,
     to,
+    generatedBy: c.get("user").displayName,
+    generatedAt: new Date().toISOString(),
+    stockAsOf: "generatedAt",
+    totalAccountIncome: money(costByDate.results.reduce((sum, row) => sum + (row.type === "รายรับ" ? Number(row.amount || 0) : 0), 0)),
+    totalQuantitySold: sellByDate.results.reduce((sum, row) => sum + (row.isDiscount ? 0 : Number(row.qty || 0)), 0),
     stockRemaining: stockRemaining.results,
     sellByDate: sellByDate.results,
     costByDate: costByDate.results,
@@ -721,16 +732,14 @@ app.get("/api/report", async (c) => {
       cashIn: money(sums.cashIn),
       transferIn: money(sums.transferIn),
       cost: money(sums.cost),
-      monthlySell: money(sums.monthlySell),
-      monthlyCost: money(sums.monthlyCost),
-      monthLabel: from.slice(5, 7),
+      ...(isAdmin ? { monthlySell: money(sums.monthlySell), monthlyCost: money(sums.monthlyCost), monthLabel: from.slice(5, 7) } : {}),
     },
     sellSums: { cash: money(sellSums.cash), transfer: money(sellSums.transfer) },
     totalIncome,
-    profit: money(sums.monthlySell - sums.monthlyCost),
+    ...(isAdmin ? { profit: money(sums.monthlySell - sums.monthlyCost) } : {}),
     voucher: { issued: Number(voucherIssued?.n ?? 0), used: Number(voucherUsed?.n ?? 0) },
   });
-});
+}
 
 /* ------------------------------ backup export / import ------------------------------ */
 

@@ -1,0 +1,69 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
+const base = process.env.BASE_URL || 'http://127.0.0.1:8799';
+assert.ok(['localhost', '127.0.0.1'].includes(new URL(base).hostname));
+let passed = 0;
+function check(label, value) { assert.ok(value, label); passed++; console.log('ok ' + label); }
+function client() { return { cookie: '', async req(method, path, body) {
+  const r = await fetch(base + path, { method, headers: { Cookie: this.cookie, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (r.headers.has('set-cookie')) this.cookie = r.headers.get('set-cookie').split(';')[0];
+  return { status: r.status, data: await r.json() };
+} }; }
+const admin = client(), staff = client(), anonymous = client();
+await admin.req('POST', '/api/login', { username: 'admin', password: '1234' });
+const snapshot = (await admin.req('GET', '/api/export')).data;
+const today = (await admin.req('GET', '/api/meta')).data.today;
+const username = 'report_' + Date.now(); let user;
+try {
+  user = (await admin.req('POST', '/api/users', { username, password: '5678', displayName: 'พนักงานรายงาน' })).data;
+  await staff.req('POST', '/api/login', { username, password: '5678' });
+  check('daily image data requires authentication', (await anonymous.req('GET', '/api/report/today')).status === 401);
+  const range = '/api/report?from=2026-01-01&to=2026-12-31';
+  check('employee cannot request date ranges', (await staff.req('GET', range)).status === 403);
+  check('admin can request ranges', (await admin.req('GET', range)).status === 200);
+  check('invalid date rejected', (await staff.req('GET', '/api/report?from=2026-02-30&to=2026-02-30')).status === 400);
+  const daily = (await staff.req('GET', `/api/report?from=${today}&to=${today}`)).data;
+  check('employee daily report has no monthly data', !('profit' in daily) && !('monthlySell' in daily.sums) && !('monthlyCost' in daily.sums) && !('monthLabel' in daily.sums));
+  check('employee can select a historical single day', (await staff.req('GET', '/api/report?from=2026-01-01&to=2026-01-01')).status === 200);
+  const itemID = (await admin.req('POST', '/api/items', { name: 'รายงานสินค้าไทย', itemTypeId: 2, price: 20, amount: 1 })).data.id;
+  const discountID = (await admin.req('POST', '/api/items', { name: 'ส่วนลดรายงาน', itemTypeId: 5, price: 0.9, amount: 0 })).data.id;
+  await admin.req('POST', '/api/sell', { billID: 'report-' + Date.now(), paymentType: 'เงินสด', items: [{ itemID, qty: 3 }, { itemID: discountID, qty: 1 }] });
+  await admin.req('POST', '/api/stock/transaction', { action: 'income', price: 100, paymentType: 'อื่นๆ', comment: 'รายรับอื่น' });
+  await admin.req('POST', '/api/stock/transaction', { action: 'expense', price: 10, paymentType: 'เงินสด', comment: 'รายจ่ายทดสอบ' });
+  const start = Date.now();
+  const report = (await staff.req('GET', '/api/report/today?from=2026-01-01&to=2026-12-31&generatedBy=admin')).data;
+  check('today endpoint forces server business date', report.from === today && report.to === today);
+  check('report author is authenticated employee', report.generatedBy === 'พนักงานรายงาน');
+  check('timestamp is generated at request time', Date.parse(report.generatedAt) >= start && Date.parse(report.generatedAt) <= Date.now());
+  check('export data also excludes employee monthly figures', !('profit' in report) && !('monthlySell' in report.sums));
+  const tables = (await admin.req('GET', '/api/export')).data.tables;
+  const sales = tables.Sell.filter(x => x.Date1 === today);
+  const qty = sales.filter(x => x.ItemID !== discountID).reduce((s, x) => s + x.Amount, 0);
+  check('unit count excludes discount pseudo items', report.totalQuantitySold === qty);
+  const income = tables.Account.filter(x => x.Date1 === today && x.Type === 'รายรับ').reduce((s, x) => s + x.Amount, 0);
+  check('income includes other income and all payment types', report.totalAccountIncome === income);
+  check('negative stock is visible', report.stockRemaining.some(x => x.name === 'รายงานสินค้าไทย' && x.amount === -2));
+  check('discount pseudo item is absent from stock', !report.stockRemaining.some(x => x.name === 'ส่วนลดรายงาน'));
+  check('cash balance includes carry forward', report.totalCashCumulative === tables.CASH.filter(x => x.Date1 <= today).reduce((s, x) => s + x.Amount, 0));
+  const context = vm.createContext({ Intl });
+  vm.runInContext(readFileSync(new URL('../public/report-image.js', import.meta.url), 'utf8'), context);
+  const renderer = context.DailyReportImage;
+  const measure = s => Array.from(s).length * 15;
+  const pages = renderer.layout(report, measure);
+  check('daily report layout contains four detail sections', pages.flatMap(p => p.blocks).filter(b => b.type === 'heading').length >= 4);
+  check('layout includes authenticated author', pages.flatMap(p => p.blocks).some(b => b.type === 'author' && b.lines.join('').includes(report.generatedBy)));
+  const large = { ...report, cashTx: Array.from({ length: 180 }, (_, i) => ({ type: 'รายรับ', amount: i, list: 'รายการภาษาไทยยาวมาก '.repeat(30) + i })) };
+  const multipage = renderer.layout(large, measure);
+  check('large reports paginate within safe image height', multipage.length > 1 && multipage.every(p => p.height <= 2700));
+  const cashRows = multipage.flatMap(p => p.blocks).filter(b => b.type === 'row' && b.cells[0].join('').startsWith('รายการภาษาไทยยาวมาก'));
+  check('pagination retains every cash row', cashRows.length === 180);
+  const long = renderer.wrap('ทดสอบภาษาไทย '.repeat(100), 300, measure);
+  check('wrapping retains every Thai character', long.join('') === 'ทดสอบภาษาไทย '.repeat(100));
+  check('wrapped text fits its column', long.every(s => measure(s) <= 300));
+  assert.throws(() => renderer.layout({ ...report, to: '2000-01-01' }, measure)); passed++;
+  console.log(`${passed} report checks passed`);
+} finally {
+  assert.equal((await admin.req('POST', '/api/import', snapshot)).status, 200, 'Restore isolated test data');
+  if (user?.id) await admin.req('PUT', '/api/users/' + user.id, { active: false });
+}
