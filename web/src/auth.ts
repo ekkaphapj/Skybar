@@ -76,6 +76,7 @@ export function installAuth(app: Hono<AppEnv>) {
     const active = await session(c);
     if (!active) return fail(c, "กรุณาเข้าสู่ระบบก่อนใช้งาน", 401);
     c.set("user", active.user); c.set("sessionHash", active.hash);
+    if (c.req.method === "DELETE" && active.user.role !== "admin") return fail(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
     if ((c.req.path.startsWith("/api/users") || ["/api/import", "/api/export"].includes(c.req.path)) && active.user.role !== "admin") return fail(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
     await next();
   });

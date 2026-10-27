@@ -9,6 +9,7 @@
     "db:migrate:local": "wrangler d1 migrations apply cottage-skybar-pos-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply cottage-skybar-pos-db --remote",
     "test": "node test/api.test.mjs",
+    "test:delete": "node test/delete.test.mjs",
     "test:logic": "node test/logic.test.mjs",
     "test:regression": "node test/regression.test.mjs",
     "test:frontend": "node test/frontend.test.mjs",

@@ -273,7 +273,7 @@ async function loadHistory() {
   const from = $("history-from").value, to = $("history-to").value;
   if (from && to && from > to) { toastErr("เลือกวันที่ไม่ถูกต้อง"); return; }
   const data = await api(`/api/orders/history?from=${from}&to=${to}&offset=${historyOffset}`);
-  $("history-rows").innerHTML = data.orders.map((order) => `<tr><td data-label="โต๊ะ">โต๊ะ ${order.tableNo}</td><td data-label="ลูกค้า">${esc(order.cusName || "-")}</td><td data-label="เช็คบิลเมื่อ">${esc(order.date)} ${esc(order.receipt?.time || "")}</td><td data-label="ผู้เช็คบิล">${esc(order.closedBy || order.owner || "-")}</td><td data-label="ชำระโดย">${esc(order.paymentType)}</td><td data-label="ยอดรวม">${fmt2(order.total)} บาท</td><td><button class="btn" data-history-order="${esc(order.id)}">ดูรายการ / ใบเสร็จ</button></td></tr>`).join("");
+  $("history-rows").innerHTML = data.orders.map((order) => `<tr><td data-label="โต๊ะ">โต๊ะ ${order.tableNo}</td><td data-label="ลูกค้า">${esc(order.cusName || "-")}</td><td data-label="เช็คบิลเมื่อ">${esc(order.date)} ${esc(order.receipt?.time || "")}</td><td data-label="ผู้เช็คบิล">${esc(order.closedBy || order.owner || "-")}</td><td data-label="ชำระโดย">${esc(order.paymentType)}</td><td data-label="ยอดรวม">${fmt2(order.total)} บาท</td><td><button class="btn" data-history-order="${esc(order.id)}">ดูรายการ / ใบเสร็จ</button> ${deleteButton("data-delete-bill", order.billID, "ลบบิล")}</td></tr>`).join("");
   $("history-empty").textContent = data.orders.length ? "" : "ยังไม่มีประวัติการขายในช่วงที่เลือก";
   $("history-page").textContent = "หน้า " + (historyOffset / 50 + 1);
   $("btn-history-prev").disabled = historyOffset === 0;
@@ -626,11 +626,34 @@ async function loadReport() {
   $("rp-voucher-stats").textContent = `จำนวน Voucher ที่แจกทั้งหมด : ${r.voucher.issued} นำมาใช้ทั้งหมด : ${r.voucher.used}`;
 
   fillTable("rp-sell-table", r.sellByDate, (x) => [esc(x.name), num(x.qty), fmt2(x.total)]);
-  fillTable("rp-cost-table", r.costByDate, (x) => [esc(x.list), fmt2(x.amount), esc(x.paymentType), x.date, esc(x.owner)]);
+  fillTable("rp-cost-table", r.costByDate, (x) => [esc(x.list), fmt2(x.amount), esc(x.paymentType), x.date, esc(x.owner), x.billID && !x.stockTransactionID ? deleteButton("data-delete-bill", x.billID, "ลบทั้งบิล") : deleteButton("data-delete-account", x.id, "ลบรายการ")]);
   fillTable("rp-cash-table", r.cashTx, (x) => [esc(x.type), fmt2(x.amount), esc(x.list), x.date]);
   fillTable("rp-stock-table", r.stockRemaining, (x) => [esc(x.name), num(x.amount)]);
 }
 function num(n) { return `<span class="num">${n}</span>`; }
+function deleteButton(attribute, value, label) {
+  return currentUser?.role === "admin" ? `<button class="btn danger" ${attribute}="${esc(value)}">${label}</button>` : "";
+}
+async function deleteRecord(button) {
+  if (currentUser?.role !== "admin" || button.disabled) return;
+  const billID = button.dataset.deleteBill;
+  const message = billID
+    ? `ลบบิล ${billID} ถาวร? ระบบจะลบรายรับและเงินสดที่เกี่ยวข้อง คืนสต็อก และคืนสิทธิ์ Voucher`
+    : "ลบรายการรายรับ/รายจ่ายนี้ถาวร? รายการเงินสดที่เกี่ยวข้องจะถูกลบด้วย หากเป็นการซื้อสินค้า ระบบจะหักสต็อกที่เคยซื้อเพิ่มกลับ";
+  if (!confirm(message)) return;
+  button.disabled = true;
+  try {
+    await api(billID ? "/api/sell/receipt/" + encodeURIComponent(billID) : "/api/accounts/" + button.dataset.deleteAccount, { method: "DELETE" });
+    foundReceipt = null; lastReceipt = null;
+    $("rc-table").querySelector("tbody").innerHTML = "";
+    $("rc-total").textContent = "-";
+    $("btn-delete-found").disabled = true;
+    if (currentView === "history") await loadHistory();
+    if (currentView === "report") await loadReport();
+    toast("ลบรายการแล้ว");
+  } catch (e) { toastErr(e.message); }
+  finally { button.disabled = button.id === "btn-delete-found" ? !foundReceipt : false; }
+}
 function fillTable(id, rows, cells) {
   $(id).querySelector("tbody").innerHTML = (rows || [])
     .map((r) => "<tr>" + cells(r).map((c) => `<td>${c}</td>`).join("") + "</tr>")
@@ -644,6 +667,7 @@ async function findReceipt() {
   const id = $("rc-bill").value.trim();
   if (!id) return;
   foundReceipt = null;
+  $("btn-delete-found").disabled = true;
   $("rc-table").querySelector("tbody").innerHTML = "";
   $("rc-total").textContent = "-";
   try {
@@ -651,6 +675,8 @@ async function findReceipt() {
     fillTable("rc-table", foundReceipt.rows,
       (r) => [esc(r.Name1), num(r.Amount), fmt2(r.Price), r.Date1, r.Time1, esc(r.Owner), esc(r.PaymentType)]);
     $("rc-total").textContent = fmt2(foundReceipt.total);
+    $("btn-delete-found").dataset.deleteBill = foundReceipt.billID;
+    $("btn-delete-found").disabled = false;
   } catch (e) { toastErr(e.message); }
 }
 function printFoundReceipt() {
@@ -726,6 +752,8 @@ function wire() {
     if (nav && !(nav.dataset.nav === "sell" && nav.closest("#view-main"))) { navigate(nav.dataset.nav); return; }
     const table = e.target.closest("[data-order]");
     if (table) { openTable(table.dataset.order).catch((err) => toastErr(err.message)); return; }
+    const deleteTarget = e.target.closest("[data-delete-bill], [data-delete-account]");
+    if (deleteTarget) { deleteRecord(deleteTarget); return; }
     const history = e.target.closest("[data-history-order]");
     if (history) { showHistoryOrder(history.dataset.historyOrder).catch((err) => toastErr(err.message)); return; }
     const del = e.target.closest("#sell-cart .del");

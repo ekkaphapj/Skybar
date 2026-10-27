@@ -590,6 +590,53 @@ app.get("/api/sell/receipt/:billId", async (c) => {
 
 /* ------------------------------ reports ------------------------------ */
 
+// All reversal queries read their quantities inside the same atomic batch.
+// A repeated/concurrent delete therefore cannot restore stock twice.
+async function deleteBill(c: Context<Env>, billID: string) {
+  const db = c.env.DB;
+  const results = await db.batch([
+    db.prepare(`UPDATE Stock SET Amount = Amount + (SELECT SUM(Amount) FROM Sell WHERE OrderID = ? AND ItemID = Stock.ItemID),
+      Date1 = ?, Time1 = ? WHERE ItemID IN (SELECT ItemID FROM Sell WHERE OrderID = ?)`)
+      .bind(billID, businessDate(), nowTime(), billID),
+    // Older voucher bills store the voucher number in the account description.
+    db.prepare(`UPDATE VOUCHER SET Status = 0 WHERE ID IN (
+      SELECT CAST(substr(List, length('รายการใช้ Voucher หมายเลข ') + 1,
+        instr(List, ' เป็นเงิน') - length('รายการใช้ Voucher หมายเลข ') - 1) AS INTEGER)
+      FROM Account WHERE BillID = ? AND PaymentType = 'Voucher'
+        AND substr(List, 1, length('รายการใช้ Voucher หมายเลข ')) = 'รายการใช้ Voucher หมายเลข '
+        AND instr(List, ' เป็นเงิน') > length('รายการใช้ Voucher หมายเลข '))`).bind(billID),
+    db.prepare("DELETE FROM CASH WHERE AccountID IN (SELECT ID FROM Account WHERE BillID = ? AND StockTransactionID IS NULL)").bind(billID),
+    db.prepare("DELETE FROM Account WHERE BillID = ? AND StockTransactionID IS NULL").bind(billID),
+    db.prepare("DELETE FROM StockTransaction WHERE BillID = ? AND TransactionType = 'ขาย'").bind(billID),
+    db.prepare("DELETE FROM Sell WHERE OrderID = ?").bind(billID),
+    db.prepare("DELETE FROM TableOrders WHERE BillID = ? AND Status = 'closed'").bind(billID),
+  ]);
+  if (!results[5].meta.changes && !results[6].meta.changes) return bad(c, "ไม่พบเลขบิลนี้ หรือถูกลบแล้ว", 404);
+  return c.json({ ok: true });
+}
+
+app.delete("/api/sell/receipt/:billId", async (c) => deleteBill(c, c.req.param("billId")));
+
+app.delete("/api/accounts/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id <= 0) return bad(c, "รหัสรายการไม่ถูกต้อง");
+  const db = c.env.DB;
+  const row = await db.prepare("SELECT * FROM Account WHERE ID = ?").bind(id).first();
+  if (!row) return bad(c, "ไม่พบรายการ หรือถูกลบแล้ว", 404);
+  if (row.BillID && !row.StockTransactionID) return deleteBill(c, String(row.BillID));
+  const results = await db.batch([
+    db.prepare(`UPDATE Stock SET Amount = Amount - (SELECT t.Amount FROM StockTransaction t JOIN Account a ON a.StockTransactionID = t.ID
+      WHERE a.ID = ? AND t.TransactionType = 'ซื้อเพิ่ม'), Date1 = ?, Time1 = ?
+      WHERE ItemID IN (SELECT t.ItemID FROM StockTransaction t JOIN Account a ON a.StockTransactionID = t.ID
+        WHERE a.ID = ? AND t.TransactionType = 'ซื้อเพิ่ม')`).bind(id, businessDate(), nowTime(), id),
+    db.prepare("DELETE FROM CASH WHERE AccountID = ?").bind(id),
+    db.prepare("DELETE FROM StockTransaction WHERE ID IN (SELECT StockTransactionID FROM Account WHERE ID = ?)").bind(id),
+    db.prepare("DELETE FROM Account WHERE ID = ?").bind(id),
+  ]);
+  if (!results[3].meta.changes) return bad(c, "ไม่พบรายการ หรือถูกลบแล้ว", 404);
+  return c.json({ ok: true });
+});
+
 app.get("/api/report", async (c) => {
   let from = c.req.query("from");
   let to = c.req.query("to");
@@ -608,8 +655,9 @@ app.get("/api/report", async (c) => {
        WHERE s.Date1 >= ? AND s.Date1 <= ? GROUP BY i.Name1`
     ).bind(from, to).all(),
     db.prepare(
-      `SELECT List AS list, Amount AS amount, PaymentType AS paymentType, Date1 AS date, Owner AS owner
-       FROM Account WHERE (Amount <> 0 OR PaymentType = 'Voucher') AND Date1 >= ? AND Date1 <= ? ORDER BY Type`
+      `SELECT ID AS id, BillID AS billID, StockTransactionID AS stockTransactionID, Type AS type,
+       List AS list, Amount AS amount, PaymentType AS paymentType, Date1 AS date, Owner AS owner
+       FROM Account WHERE Date1 >= ? AND Date1 <= ? ORDER BY Type, ID`
     ).bind(from, to).all(),
     db.prepare(
       `SELECT Type1 AS type, Amount AS amount, List AS list, Date1 AS date FROM CASH

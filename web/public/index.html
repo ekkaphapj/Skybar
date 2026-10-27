@@ -408,7 +408,7 @@
       <table class="tbl" id="rp-sell-table"><thead><tr><th>สินค้า</th><th>จำนวน</th><th>ยอดเงิน</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card"><h3>รายรับรายจ่าย</h3>
-      <table class="tbl" id="rp-cost-table"><thead><tr><th>รายการ</th><th>ยอดเงิน</th><th>ช่องทาง</th><th>วันที่</th><th>โดย</th></tr></thead><tbody></tbody></table>
+      <table class="tbl" id="rp-cost-table"><thead><tr><th>รายการ</th><th>ยอดเงิน</th><th>ช่องทาง</th><th>วันที่</th><th>โดย</th><th>จัดการ (admin)</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card"><h3>ธุรกรรมเงินสด</h3>
       <table class="tbl" id="rp-cash-table"><thead><tr><th>ประเภท</th><th>ยอด</th><th>รายการ</th><th>วันที่</th></tr></thead><tbody></tbody></table>
@@ -430,6 +430,7 @@
       <label class="field grow"><span>เลขบิล</span><input id="rc-bill"></label>
       <button class="btn primary" id="btn-find-receipt">ค้นหา</button>
       <button class="btn" id="btn-print-found">🖨️ พิมพ์ใบเสร็จ</button>
+      <button class="btn danger hidden" id="btn-delete-found" data-admin-only data-delete-bill="" disabled>ลบบิล</button>
     </div>
     <table class="tbl" id="rc-table">
       <thead><tr><th>รายการ</th><th>จำนวน</th><th>ยอดเงิน</th><th>วันที่</th><th>เวลา</th><th>บันทึกโดย</th><th>ชำระโดย</th></tr></thead>
@@ -538,6 +539,6 @@
 <script src="/printing.js?v=5f0f2c219c8a"></script>
 <script src="/restaurant.js?v=8740682fffea"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
-<script src="/app.js?v=5302251c0359"></script>
+<script src="/app.js?v=273757c175ef"></script>
 </body>
 </html>
