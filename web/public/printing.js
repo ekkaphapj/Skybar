@@ -69,9 +69,9 @@ function receiptPayload(rc, testOnly = false) {
   return {
     width: Number(localStorage.getItem("pos_paper_width") || 58) === 80 ? 48 : 32,
     shop: (rc.shopType ?? shopType) === 0 ? "THE COTTAGE SKY BAR" : "THE COTTAGE MINI MART",
-    title: rc.paid ? "ใบเสร็จรับเงิน / RECEIPT" : "ใบแจ้งรายการ / BILL",
+    title: rc.paid ? (rc.isCopy ? "สำเนาใบเสร็จ / COPY" : "ใบเสร็จรับเงิน / RECEIPT") : "ใบแจ้งรายการ / BILL",
     bill: rc.bill, date: rc.date, pay: rc.pay, owner: rc.owner, cus: rc.cus || "", tableNo: rc.tableNo,
-    items: rc.lines, total: rc.total, footer: rc.paid ? "ชำระแล้ว / PAID" : "ยังไม่ชำระเงิน / UNPAID",
+    items: rc.lines, total: rc.total, footer: rc.paid ? (rc.isCopy ? "สำเนา · ชำระแล้ว / COPY · PAID" : "ชำระแล้ว / PAID") : "ยังไม่ชำระเงิน / UNPAID",
   };
 }
 async function printReceiptNow(rc, testOnly = false, copies = 1, jobId) {
@@ -87,7 +87,7 @@ async function printReceiptNow(rc, testOnly = false, copies = 1, jobId) {
     if (!printerInfo.raster) throw new Error("กรุณาอัปเดต print-agent เป็นรุ่น 2 จากหน้าตั้งค่าการพิมพ์");
     const printer = localStorage.getItem("pos_printer_name") || "";
     if (!printer || !printerInfo.printers.includes(printer)) throw new Error("เลือกเครื่อง thermal ที่พร้อมใช้ในหน้าตั้งค่าการพิมพ์ก่อน");
-    // One job contains both copies. No silent resend/fallback after a timeout:
+    // No silent resend/fallback after a timeout:
     // the spooler may already have accepted the job even if its response was lost.
     const result = await fetchWithTimeout(AGENT + "/print", 45000, {
       method: "POST", headers: { "Content-Type": "application/json" },

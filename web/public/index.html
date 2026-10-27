@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#183e36">
 <title>The Cottage Sky Bar POS</title>
 <link rel="icon" type="image/png" href="/logo.png">
-<link rel="stylesheet" href="/style.css?v=7ef8c947766a">
-<link rel="stylesheet" href="/restaurant.css?v=ae51637cdae1">
+<link rel="stylesheet" href="/style.css?v=0b721e28e59f">
+<link rel="stylesheet" href="/restaurant.css?v=b43bc81d8fd9">
 </head>
 <body>
 <aside id="app-sidebar" class="app-sidebar hidden" aria-label="เมนูหลัก">
@@ -182,6 +182,7 @@
     <div class="card product-card">
       <div class="section-heading"><span class="eyebrow">รับออร์เดอร์</span><h2>เพิ่มรายการอาหารและเครื่องดื่ม</h2></div>
 <div class="desktop-food-menu" id="desktop-food-menu"><div class="food-menu-top"><h3>เลือกเมนูอร่อย <span>♨</span></h3><label><span class="sr-only">ค้นหาเมนู</span><input id="food-search" placeholder="ค้นหาอาหาร / เครื่องดื่ม…" type="search"></label></div><div id="food-categories" class="food-categories"></div><div id="food-tiles" class="food-tiles"></div><p class="hint">แตะเมนูเพื่อเพิ่มครั้งละ 1 · สแกนบาร์โค้ดหรือเพิ่มส่วนลดได้ด้านล่าง</p></div>
+      <details class="manual-item-entry" id="manual-item-entry" open><summary>บาร์โค้ด / จำนวน / ส่วนลด / ข้อมูลบิล</summary>
       <div class="row">
         <label class="field grow"><span>ผู้ขาย</span>
           <select id="sell-seller"></select>
@@ -220,6 +221,7 @@
         </label>
         <button class="btn primary" id="btn-add-item">เพิ่ม</button>
       </div>
+      </details>
     </div>
 
     <div class="card order-card" id="order-card">
@@ -292,7 +294,7 @@
       <label class="field grow"><span>ประเภทสินค้า</span><select id="stock-type"></select></label>
       <button class="btn" id="btn-load-stock">แสดงสต็อก</button>
     </div>
-    <table class="tbl" id="stock-table">
+    <table class="tbl mobile-records" id="stock-table">
       <thead><tr><th>รหัส</th><th>รายการ</th><th>จำนวน</th><th>วันที่</th><th>เวลา</th></tr></thead>
       <tbody></tbody>
     </table>
@@ -379,7 +381,7 @@
     <button class="btn back" data-nav="main">← กลับ</button>
     <div class="page-title">📊 รายงาน</div>
   </header>
-  <div class="card">
+  <div class="card report-filter">
     <div class="row">
       <label class="field" id="rp-from-field" data-admin-only><span>จากวันที่</span><input type="date" id="rp-from"></label>
       <label class="field"><span id="rp-to-label">ถึงวันที่</span><input type="date" id="rp-to"></label>
@@ -391,33 +393,34 @@
   <p class="hint" id="report-access-note"></p>
   <div id="report-body" class="hidden">
     <div class="card">
-      <h3>สรุป</h3>
+      <h3>สรุปรายงาน</h3><p class="hint" id="report-period"></p>
       <div class="stat-grid">
-        <div class="stat"><span>รวมยอดขาย (ช่วงวันที่)</span><b id="rp-total-income">-</b></div>
-        <div class="stat"><span>รวมรายจ่าย (ช่วงวันที่)</span><b id="rp-total-cost">-</b></div>
+        <div class="stat"><span>รายรับทั้งหมด</span><b id="rp-account-income">-</b></div>
+        <div class="stat"><span>ยอดขายสินค้า</span><b id="rp-total-income">-</b></div>
+        <div class="stat"><span>รายจ่ายทั้งหมด</span><b id="rp-total-cost">-</b></div>
         <div class="stat" data-admin-only><span>กำไรเดือนนี้ (รายรับ-รายจ่าย)</span><b id="rp-profit">-</b></div>
-        <div class="stat"><span>เงินสดสะสม (ถึงวันสุดท้าย)</span><b id="rp-cash-cum">-</b></div>
-        <div class="stat"><span>รายรับเงินสด (Account)</span><b id="rp-cash-in">-</b></div>
-        <div class="stat"><span>รายรับโอน (Account)</span><b id="rp-transfer-in">-</b></div>
-        <div class="stat"><span>ยอดขายเงินสด (Sell)</span><b id="rp-sell-cash">-</b></div>
-        <div class="stat"><span>ยอดขายโอน (Sell)</span><b id="rp-sell-transfer">-</b></div>
+        <div class="stat"><span>จำนวนสินค้าที่ขาย</span><b id="rp-quantity">-</b></div>
+        <div class="stat"><span>เงินสดคงเหลือ (รวมยอดยกมา)</span><b id="rp-cash-cum">-</b></div>
+      </div>
+      <details class="report-payment-details"><summary>รายละเอียดช่องทางชำระเงิน</summary><div class="stat-grid">
+        <div class="stat"><span>รายรับเงินสด</span><b id="rp-cash-in">-</b></div>
+        <div class="stat"><span>รายรับโอน</span><b id="rp-transfer-in">-</b></div>
+        <div class="stat"><span>ยอดขายเงินสด</span><b id="rp-sell-cash">-</b></div>
+        <div class="stat"><span>ยอดขายโอน</span><b id="rp-sell-transfer">-</b></div>
         <div class="stat" data-admin-only><span id="rp-month-label">เดือน</span><b id="rp-month-sell">-</b></div>
         <div class="stat" data-admin-only><span id="rp-month-label2">เดือน (รายจ่าย)</span><b id="rp-month-cost">-</b></div>
       </div>
+      </details>
       <p class="hint" id="rp-voucher-stats"></p>
     </div>
-    <div class="card"><h3>ยอดขายตามสินค้า</h3>
-      <table class="tbl" id="rp-sell-table"><thead><tr><th>สินค้า</th><th>จำนวน</th><th>ยอดเงิน</th></tr></thead><tbody></tbody></table>
-    </div>
-    <div class="card"><h3>รายรับรายจ่าย</h3>
-      <table class="tbl" id="rp-cost-table"><thead><tr><th>รายการ</th><th>ยอดเงิน</th><th>ช่องทาง</th><th>วันที่</th><th>โดย</th><th data-admin-only>จัดการ (admin)</th></tr></thead><tbody></tbody></table>
-    </div>
-    <div class="card"><h3>ธุรกรรมเงินสด</h3>
-      <table class="tbl" id="rp-cash-table"><thead><tr><th>ประเภท</th><th>ยอด</th><th>รายการ</th><th>วันที่</th></tr></thead><tbody></tbody></table>
-    </div>
-    <div class="card"><h3>สต็อกคงเหลือ</h3>
-      <table class="tbl" id="rp-stock-table"><thead><tr><th>ชื่อสินค้า</th><th>จำนวน</th></tr></thead><tbody></tbody></table>
-    </div>
+    <details class="card report-section" open><summary>ยอดขายตามสินค้า<span>แตะเพื่อดูรายการ</span></summary>
+      <table class="tbl mobile-records" id="rp-sell-table"><thead><tr><th>สินค้า</th><th>จำนวน</th><th>ยอดเงิน</th></tr></thead><tbody></tbody></table></details>
+    <details class="card report-section"><summary>รายรับรายจ่าย<span>แตะเพื่อดูรายการ</span></summary>
+      <table class="tbl mobile-records" id="rp-cost-table"><thead><tr><th>รายการ</th><th>ยอดเงิน</th><th>ช่องทาง</th><th>วันที่</th><th>โดย</th><th data-admin-only>จัดการ (admin)</th></tr></thead><tbody></tbody></table></details>
+    <details class="card report-section"><summary>ธุรกรรมเงินสด<span>แตะเพื่อดูรายการ</span></summary>
+      <table class="tbl mobile-records" id="rp-cash-table"><thead><tr><th>ประเภท</th><th>ยอด</th><th>รายการ</th><th>วันที่</th></tr></thead><tbody></tbody></table></details>
+    <details class="card report-section"><summary>สต็อกคงเหลือ<span>แตะเพื่อดูรายการ</span></summary>
+      <table class="tbl mobile-records" id="rp-stock-table"><thead><tr><th>ชื่อสินค้า</th><th>จำนวน</th></tr></thead><tbody></tbody></table></details>
   </div>
 </section>
 
@@ -434,7 +437,7 @@
       <button class="btn" id="btn-print-found">🖨️ พิมพ์ใบเสร็จ</button>
       <button class="btn danger hidden" id="btn-delete-found" data-admin-only data-delete-bill="" disabled>ลบบิล</button>
     </div>
-    <table class="tbl" id="rc-table">
+    <table class="tbl mobile-records" id="rc-table">
       <thead><tr><th>รายการ</th><th>จำนวน</th><th>ยอดเงิน</th><th>วันที่</th><th>เวลา</th><th>บันทึกโดย</th><th>ชำระโดย</th></tr></thead>
       <tbody></tbody>
     </table>
@@ -464,7 +467,7 @@
       <button class="btn primary" id="btn-gen-vc">สร้าง</button>
     </div>
     <p class="hint" id="vc-gen-result"></p>
-    <table class="tbl" id="vc-table"><thead><tr><th>เลข Voucher</th><th>วันที่</th><th>สถานะ</th></tr></thead><tbody></tbody></table>
+    <table class="tbl mobile-records" id="vc-table"><thead><tr><th>เลข Voucher</th><th>วันที่</th><th>สถานะ</th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 
@@ -489,7 +492,12 @@
   <form id="checkout-result-form" class="card narrow login-box">
     <h3 id="checkout-result-title">เช็คบิลสำเร็จ</h3>
     <p id="checkout-result-message"></p>
-    <button type="submit" class="btn primary big">ตกลง / กลับหน้าหลัก</button>
+    <div class="checkout-print-actions">
+      <button type="button" class="btn primary big" id="btn-checkout-print">พิมพ์ใบเสร็จ</button>
+      <button type="button" class="btn big" id="btn-checkout-copy">พิมพ์สำเนา</button>
+    </div>
+    <p id="checkout-print-status" class="hint print-status" role="status"></p>
+    <button type="submit" class="btn big" id="btn-checkout-done">กลับหน้าหลัก</button>
   </form>
 </dialog>
 <div id="receipt-overlay" class="overlay hidden">
@@ -517,8 +525,10 @@
       <div class="r-thanks" id="r-thanks">ขอบคุณค่ะ / THANK YOU</div>
       </div>
     </div>
+    <p id="receipt-print-status" class="hint print-status" role="status"></p>
     <div class="row actions no-print">
-      <button class="btn primary big" id="btn-print-receipt">🖨️ พิมพ์</button>
+      <button class="btn primary big" id="btn-print-receipt">พิมพ์ใบเสร็จ</button>
+      <button class="btn big" id="btn-print-copy">พิมพ์สำเนา</button>
       <button class="btn big" id="btn-close-receipt">ปิด</button>
     </div>
   </div>
@@ -545,10 +555,10 @@
 <div id="toast" class="toast hidden"></div>
 
 <script src="/receipt.js?v=86f896260c92"></script>
-<script src="/printing.js?v=5f0f2c219c8a"></script>
-<script src="/restaurant.js?v=8740682fffea"></script>
+<script src="/printing.js?v=3cb01c07f523"></script>
+<script src="/restaurant.js?v=6276b6093587"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=47384f567771"></script>
-<script src="/app.js?v=0952ecb639e0"></script>
+<script src="/app.js?v=e487f0396370"></script>
 </body>
 </html>

@@ -39,7 +39,9 @@ try {
   check('export data also excludes employee monthly figures', !('profit' in report) && !('monthlySell' in report.sums));
   const tables = (await admin.req('GET', '/api/export')).data.tables;
   const sales = tables.Sell.filter(x => x.Date1 === today);
-  const qty = sales.filter(x => x.ItemID !== discountID).reduce((s, x) => s + x.Amount, 0);
+  const discountTypes = new Set(tables.ItemType.filter(t => t.Name1 === 'ส่วนลด').map(t => t.ID));
+  const discountItems = new Set(tables.Items.filter(i => discountTypes.has(i.ItemTypeID)).map(i => i.ID));
+  const qty = sales.filter(x => !discountItems.has(x.ItemID)).reduce((s, x) => s + x.Amount, 0);
   check('unit count excludes discount pseudo items', report.totalQuantitySold === qty);
   const income = tables.Account.filter(x => x.Date1 === today && x.Type === 'รายรับ').reduce((s, x) => s + x.Amount, 0);
   check('income includes other income and all payment types', report.totalAccountIncome === income);

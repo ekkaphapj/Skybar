@@ -280,9 +280,9 @@ async function loadHistory() {
   $("btn-history-prev").disabled = historyOffset === 0;
   $("btn-history-next").disabled = !data.hasMore;
 }
-function receiptFromSale(sale, copies = 2) {
+function receiptFromSale(sale) {
   return { paid: true, bill: sale.billID, date: sale.date + " " + sale.time, pay: sale.paymentType,
-    owner: sale.owner, cus: sale.cusName, tableNo: sale.tableNo, shopType: sale.shopType, lines: sale.lines, total: sale.total, copies };
+    owner: sale.owner, cus: sale.cusName, tableNo: sale.tableNo, shopType: sale.shopType, lines: sale.lines, total: sale.total, copies: 1 };
 }
 async function showHistoryOrder(id) {
   const order = await api("/api/orders/" + encodeURIComponent(id));
@@ -317,6 +317,7 @@ async function initSell() {
   $("sell-cus").value = order.cusName;
   $("sell-room").value = order.roomNo || "";
   $("sell-seller").value = currentUser?.displayName || "";
+  $("manual-item-entry").open = window.matchMedia("(min-width:851px)").matches;
   $("order-save-status").textContent = "บันทึกรายการโต๊ะแล้ว";
   renderCart();
   await RestaurantView.loadMenu();
@@ -372,7 +373,7 @@ function renderCart() {
 }
 function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;'); }
 
-function addToCart(item) {
+function addToCart(item, focusBarcode = true) {
   if (savingSell) return;
   const qty = Number($("sell-qty").value) || 1;
   const total = cart.reduce((s, l) => s + l.price, 0);
@@ -391,7 +392,7 @@ function addToCart(item) {
   $("sell-barcode").value = "";
   voucherOk = false;
   renderCart();
-  $("sell-barcode").focus();
+  if (focusBarcode) $("sell-barcode").focus();
   queueOrderSave();
 }
 
@@ -444,10 +445,7 @@ async function saveSell() {
     lastReceipt = receiptFromSale(res);
     activeOrder = null;
     sessionStorage.removeItem("selectedOrder");
-    let printError = "", printMessage = "";
-    try { const result = await printReceiptNow(lastReceipt, false, 2, "checkout:" + res.billID); printMessage = result?.message || ""; }
-    catch (e) { printError = "\nพิมพ์ใบเสร็จไม่สำเร็จ: " + e.message + "\nพิมพ์ซ้ำได้จากประวัติการขาย"; }
-    await showCheckoutSuccess(printError || printMessage);
+    await showCheckoutSuccess(lastReceipt);
     $("receipt-overlay").classList.add("hidden");
     resetSell(false);
     navigate("main");
@@ -455,11 +453,18 @@ async function saveSell() {
   finally { savingSell = false; $("btn-save-sell").disabled = false; $("view-sell").inert = false; $("app-sidebar").inert = false; $("mobile-nav").inert = false; }
 }
 
-function showCheckoutSuccess(printError = "") {
+function showCheckoutSuccess(receipt) {
   return new Promise((resolve) => {
     const dialog = $("checkout-result");
-    $("checkout-result-message").textContent = printError || "บันทึกการขายแล้ว และส่งใบเสร็จ 2 ชุดไปยังงานพิมพ์";
-    const done = () => { dialog.close(); dialog.oncancel = null; $("checkout-result-form").onsubmit = null; resolve(); };
+    $("checkout-result-message").textContent = `โต๊ะ ${receipt.tableNo || "-"} · ${fmt2(receipt.total)} บาท · บันทึกการขายแล้ว`;
+    $("checkout-print-status").textContent = "เลือกพิมพ์ทีละใบ ตัดกระดาษก่อนกดพิมพ์สำเนา หรือกลับหน้าหลักได้โดยไม่พิมพ์";
+    $("btn-checkout-print").onclick = () => printSingleReceipt(receipt, false, "checkout-print-status");
+    $("btn-checkout-copy").onclick = () => printSingleReceipt(receipt, true, "checkout-print-status");
+    const done = () => {
+      if (receiptPrintBusy) return;
+      dialog.close(); dialog.oncancel = null; $("checkout-result-form").onsubmit = null;
+      $("btn-checkout-print").onclick = null; $("btn-checkout-copy").onclick = null; resolve();
+    };
     $("checkout-result-form").onsubmit = (event) => { event.preventDefault(); done(); };
     dialog.oncancel = (event) => { event.preventDefault(); done(); };
     dialog.showModal();
@@ -481,6 +486,19 @@ function printBillPreview() {
 
 /* ---------------- receipt modal + printing ---------------- */
 let lastReceipt = null;
+let receiptPrintBusy = false;
+async function printSingleReceipt(receipt, isCopy = false, statusID = "receipt-print-status") {
+  if (!receipt || receiptPrintBusy) return;
+  receiptPrintBusy = true;
+  const controls = ["btn-checkout-print", "btn-checkout-copy", "btn-checkout-done", "btn-print-receipt", "btn-print-copy", "btn-close-receipt"];
+  controls.forEach(id => { $(id).disabled = true; });
+  $(statusID).textContent = isCopy ? "กำลังเตรียมสำเนา 1 ใบ…" : "กำลังเตรียมใบเสร็จ 1 ใบ…";
+  try {
+    const result = await printReceiptNow({ ...receipt, isCopy }, false, 1, `${isCopy ? "copy" : "receipt"}:${crypto.randomUUID()}`);
+    $(statusID).textContent = (result?.message || "ส่งงานพิมพ์แล้ว") + " · ตัดกระดาษใบนี้ก่อนพิมพ์ใบถัดไป";
+  } catch (e) { $(statusID).textContent = "พิมพ์ไม่สำเร็จ: " + e.message + " · ตรวจเครื่องพิมพ์ก่อนกดพิมพ์ใหม่"; }
+  finally { receiptPrintBusy = false; controls.forEach(id => { $(id).disabled = false; }); }
+}
 function showReceipt(rc) {
   lastReceipt = rc;
   $("r-shop").textContent = (rc.shopType ?? shopType) === 0 ? "THE COTTAGE SKY BAR" : "THE COTTAGE MINI MART";
@@ -490,7 +508,9 @@ function showReceipt(rc) {
   $("r-cus").textContent = rc.cus || "-";
   $("r-table").textContent = rc.tableNo || "-";
   $("r-table-line").classList.toggle("hidden", !rc.tableNo);
-  $("btn-print-receipt").textContent = rc.copies === 2 ? "🖨️ พิมพ์ใบเสร็จ 2 ชุดอีกครั้ง" : "🖨️ พิมพ์";
+  $("btn-print-receipt").textContent = rc.paid ? "พิมพ์ใบเสร็จ" : "พิมพ์บิล";
+  $("btn-print-copy").classList.toggle("hidden", !rc.paid);
+  $("receipt-print-status").textContent = "พิมพ์ครั้งละ 1 ใบ ตัดกระดาษก่อนพิมพ์ใบถัดไป";
   $("r-items").innerHTML = rc.lines
     .map((l) => `<div class="r-item"><span>${esc(l.name)}</span><span>${l.qty}</span><span>${fmt2(l.price)}</span></div>`)
     .join("");
@@ -499,7 +519,7 @@ function showReceipt(rc) {
   $("receipt-overlay").classList.remove("hidden");
   $("r-raster").classList.add("hidden");
   $("receipt-text").classList.remove("hidden");
-  Receipt58.render(receiptPayload(rc), 1, rc.copies || 1, Number(localStorage.getItem("pos_paper_width") || 58)).then((canvas) => {
+  Receipt58.render(receiptPayload(rc), 1, 1, Number(localStorage.getItem("pos_paper_width") || 58)).then((canvas) => {
     if (lastReceipt !== rc) return;
     $("r-raster").src = canvas.toDataURL("image/png");
     $("r-raster").classList.remove("hidden");
@@ -518,8 +538,8 @@ async function loadStockTable() {
   $("stock-table").querySelector("tbody").innerHTML = rows
     .map(
       (r) => `<tr class="clickable" data-id="${r.itemCode}" data-name="${esc(r.name)}">
-        <td>${r.itemCode}</td><td>${esc(r.name)}</td><td class="num">${r.amount}</td>
-        <td>${r.date || "-"}</td><td>${r.time || "-"}</td></tr>`
+        <td data-label="รหัส">${r.itemCode}</td><td data-label="สินค้า">${esc(r.name)}</td><td data-label="คงเหลือ" class="num">${r.amount}</td>
+        <td data-label="วันที่">${r.date || "-"}</td><td data-label="เวลา">${r.time || "-"}</td></tr>`
     )
     .join("");
 }
@@ -642,6 +662,9 @@ async function loadReport() {
   const r = await api(`/api/report?from=${from}&to=${to}`);
   if (request !== reportRequest) return;
   $("rp-total-income").textContent = fmt2(r.totalIncome);
+  $("rp-account-income").textContent = fmt2(r.totalAccountIncome);
+  $("rp-quantity").textContent = r.totalQuantitySold + " ชิ้น";
+  $("report-period").textContent = from === to ? "ประจำวันที่ " + from : "ตั้งแต่ " + from + " ถึง " + to;
   $("rp-total-cost").textContent = fmt2(r.sums.cost);
   $("rp-profit").textContent = r.profit === undefined ? "-" : fmt2(r.profit);
   $("rp-cash-cum").textContent = fmt2(r.totalCashCumulative);
@@ -718,9 +741,10 @@ async function deleteRecord(button) {
   finally { button.disabled = button.id === "btn-delete-found" ? !foundReceipt : false; }
 }
 function fillTable(id, rows, cells) {
+  const labels = Array.from($(id).querySelectorAll("thead th"), th => th.textContent);
   $(id).querySelector("tbody").innerHTML = (rows || [])
-    .map((r) => "<tr>" + cells(r).map((c) => `<td>${c}</td>`).join("") + "</tr>")
-    .join("");
+    .map((r) => "<tr>" + cells(r).map((c, i) => `<td data-label="${esc(labels[i] || "")}">${c}</td>`).join("") + "</tr>")
+    .join("") || `<tr class="empty-row"><td colspan="${labels.length || 1}">ไม่มีรายการในวันที่เลือก</td></tr>`;
 }
 
 /* ---------------- receipt lookup ---------------- */
@@ -891,7 +915,8 @@ function wire() {
   };
 
   // receipt modal
-  $("btn-print-receipt").onclick = () => lastReceipt && printReceiptNow(lastReceipt, false, lastReceipt.copies || 1).catch((e) => toastErr(e.message));
+  $("btn-print-receipt").onclick = () => printSingleReceipt(lastReceipt);
+  $("btn-print-copy").onclick = () => printSingleReceipt(lastReceipt, true);
   $("btn-close-receipt").onclick = () => $("receipt-overlay").classList.add("hidden");
 
   // stock

@@ -120,7 +120,7 @@
     el('food-tiles').innerHTML = items.length ? items.map(i => `<button type="button" class="food-tile" data-food-item="${Number(i.ID)}" aria-label="เพิ่ม ${e(i.Name1)} 1 รายการ ราคา ${number(i.Price)} บาท"><span class="food-art ${/อาหาร/.test(i.TypeName) ? 'food-meal' : ''}"><span>${icon(i)}</span><i>✦</i></span><span class="food-name">${e(i.Name1)}</span><small>คงเหลือ ${Number(i.Amount)} · ${e(i.TypeName)}</small><span class="food-tile-bottom"><strong>฿ ${number(i.Price)}</strong><b>＋</b></span></button>`).join('') : '<p class="hint food-no-results">ไม่พบเมนูที่ค้นหา ลองเลือกประเภทอื่นหรือเพิ่มสินค้าก่อน</p>';
   }
   async function loadMenu() {
-    if (!el('food-tiles') || !window.matchMedia('(min-width:1050px)').matches) return;
+    if (!el('food-tiles')) return;
     try { catalog = await api('/api/items'); category = 'all'; el('food-search').value = ''; renderMenu(); }
     catch (err) { el('food-tiles').textContent = 'โหลดเมนูไม่สำเร็จ: ' + err.message; }
   }
@@ -153,7 +153,7 @@
       const button = event.target.closest('[data-food-item]');
       if (!button || savingSell) return;
       const item = catalog.find(i => Number(i.ID) === Number(button.dataset.foodItem));
-      if (item) { el('sell-qty').value = '1'; addToCart(item); button.classList.remove('just-added'); requestAnimationFrame(() => button.classList.add('just-added')); button.focus(); }
+      if (item) { el('sell-qty').value = '1'; addToCart(item, false); button.classList.remove('just-added'); requestAnimationFrame(() => button.classList.add('just-added')); button.focus({ preventScroll: true }); }
     };
   }
   root.RestaurantView = { scene, model, countItems, wire, setView, loadMenu, refresh(nextOrders, nextDashboard) { orders = nextOrders; dashboard = nextDashboard; render(); } };
