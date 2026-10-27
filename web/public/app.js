@@ -164,7 +164,7 @@ async function loadActiveTables() {
   $("summary-free").innerHTML = (20 - activeTables.length) + " <small>โต๊ะ</small>";
   $("summary-total").innerHTML = fmt2(activeTables.reduce((sum, order) => sum + Number(order.total || 0), 0)) + " <small>บาท</small>";
   $("active-tables").innerHTML = activeTables.length ? activeTables.map((order) =>
-    `<button class="btn table-tile" data-order="${esc(order.id)}"><strong>โต๊ะ ${order.tableNo}</strong><span>${esc(order.cusName || "ไม่ระบุชื่อ")}</span><small>${order.items.length} รายการ · ${fmt2(order.total)} บาท</small></button>`
+    `<button class="btn table-tile" data-order="${esc(order.id)}"><strong>${esc(SeatPlan.label(order.tableNo))}</strong><span>${esc(order.cusName || "ไม่ระบุชื่อ")}</span><small>${order.items.length} รายการ · ${fmt2(order.total)} บาท</small></button>`
   ).join("") : '<div class="empty-tables"><span class="empty-icon">▦</span><strong>พร้อมต้อนรับลูกค้า</strong><p>ยังไม่มีโต๊ะเปิดการขาย เริ่มต้นโต๊ะแรกได้เลย</p><button class="btn primary" data-open-sale>＋ เปิดการขาย</button></div>';
 }
 function askCustomerName(preferredTable = null) {
@@ -175,7 +175,7 @@ function askCustomerName(preferredTable = null) {
     input.value = "";
     const busy = new Set(activeTables.map((order) => Number(order.tableNo)));
     $("cus-table").innerHTML = '<option value="">— เลือกโต๊ะ —</option>' +
-      Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}"${busy.has(i + 1) ? " disabled" : ""}>โต๊ะ ${i + 1}${busy.has(i + 1) ? " (กำลังขาย)" : ""}</option>`).join("");
+      Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}"${busy.has(i + 1) ? " disabled" : ""}>${esc(SeatPlan.label(i + 1))}${busy.has(i + 1) ? " (กำลังขาย)" : ""}</option>`).join("");
     $("cus-table").value = "";
     if (Number.isInteger(preferredTable) && preferredTable >= 1 && preferredTable <= 20 && !busy.has(preferredTable)) $("cus-table").value = String(preferredTable);
     $("cus-error").classList.add("hidden");
@@ -274,7 +274,7 @@ async function loadHistory() {
   const from = $("history-from").value, to = $("history-to").value;
   if (from && to && from > to) { toastErr("เลือกวันที่ไม่ถูกต้อง"); return; }
   const data = await api(`/api/orders/history?from=${from}&to=${to}&offset=${historyOffset}`);
-  $("history-rows").innerHTML = data.orders.map((order) => `<tr><td data-label="โต๊ะ">โต๊ะ ${order.tableNo}</td><td data-label="ลูกค้า">${esc(order.cusName || "-")}</td><td data-label="เช็คบิลเมื่อ">${esc(order.date)} ${esc(order.receipt?.time || "")}</td><td data-label="ผู้เช็คบิล">${esc(order.closedBy || order.owner || "-")}</td><td data-label="ชำระโดย">${esc(order.paymentType)}</td><td data-label="ยอดรวม">${fmt2(order.total)} บาท</td><td><button class="btn" data-history-order="${esc(order.id)}">ดูรายการ / ใบเสร็จ</button> ${deleteButton("data-delete-bill", order.billID, "ลบบิล")}</td></tr>`).join("");
+  $("history-rows").innerHTML = data.orders.map((order) => `<tr><td data-label="โต๊ะ">${esc(SeatPlan.label(order.tableNo))}</td><td data-label="ลูกค้า">${esc(order.cusName || "-")}</td><td data-label="เช็คบิลเมื่อ">${esc(order.date)} ${esc(order.receipt?.time || "")}</td><td data-label="ผู้เช็คบิล">${esc(order.closedBy || order.owner || "-")}</td><td data-label="ชำระโดย">${esc(order.paymentType)}</td><td data-label="ยอดรวม">${fmt2(order.total)} บาท</td><td><button class="btn" data-history-order="${esc(order.id)}">ดูรายการ / ใบเสร็จ</button> ${deleteButton("data-delete-bill", order.billID, "ลบบิล")}</td></tr>`).join("");
   $("history-empty").textContent = data.orders.length ? "" : "ยังไม่มีประวัติการขายในช่วงที่เลือก";
   $("history-page").textContent = "หน้า " + (historyOffset / 50 + 1);
   $("btn-history-prev").disabled = historyOffset === 0;
@@ -305,7 +305,7 @@ async function initSell() {
   $("sell-bizdate").textContent = businessDate();
   const isSky = shopType === 0;
   $("sell-shopname").textContent = isSky ? "THE COTTAGE SKY BAR" : "THE COTTAGE MINI MART";
-  $("sell-cusname").textContent = "โต๊ะ " + order.tableNo;
+  $("sell-cusname").textContent = SeatPlan.label(order.tableNo);
   $("btn-print-bill").classList.toggle("hidden", !isSky);
   // qty options 1-20 (same as original)
   if (!$("sell-qty").options.length)
@@ -456,7 +456,7 @@ async function saveSell() {
 function showCheckoutSuccess(receipt) {
   return new Promise((resolve) => {
     const dialog = $("checkout-result");
-    $("checkout-result-message").textContent = `โต๊ะ ${receipt.tableNo || "-"} · ${fmt2(receipt.total)} บาท · บันทึกการขายแล้ว`;
+    $("checkout-result-message").textContent = `${SeatPlan.label(receipt.tableNo || "-")} · ${fmt2(receipt.total)} บาท · บันทึกการขายแล้ว`;
     $("checkout-print-status").textContent = "เลือกพิมพ์ทีละใบ ตัดกระดาษก่อนกดพิมพ์สำเนา หรือกลับหน้าหลักได้โดยไม่พิมพ์";
     $("btn-checkout-print").onclick = () => printSingleReceipt(receipt, false, "checkout-print-status");
     $("btn-checkout-copy").onclick = () => printSingleReceipt(receipt, true, "checkout-print-status");
@@ -506,7 +506,7 @@ function showReceipt(rc) {
   $("r-date").textContent = rc.date;
   $("r-pay").textContent = rc.pay;
   $("r-cus").textContent = rc.cus || "-";
-  $("r-table").textContent = rc.tableNo || "-";
+  $("r-table").textContent = rc.tableNo ? SeatPlan.shortLabel(rc.tableNo) : "-";
   $("r-table-line").classList.toggle("hidden", !rc.tableNo);
   $("btn-print-receipt").textContent = rc.paid ? "พิมพ์ใบเสร็จ" : "พิมพ์บิล";
   $("btn-print-copy").classList.toggle("hidden", !rc.paid);

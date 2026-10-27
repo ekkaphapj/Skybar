@@ -38,6 +38,7 @@ const context = vm.createContext({
   console, setTimeout(callback, ms) { const timer = setTimeout(callback, ms); timer.unref(); return timer; }, clearTimeout,
 });
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+vm.runInContext(readFileSync(new URL("../public/seat-plan.js", import.meta.url), "utf8"), context);
 vm.runInContext(readFileSync(new URL("../public/receipt.js", import.meta.url), "utf8"), context);
 vm.runInContext(readFileSync(new URL("../public/printing.js", import.meta.url), "utf8"), context);
 vm.runInContext(source.split("/* ---------------- boot ---------------- */")[0], context);
@@ -232,4 +233,14 @@ vm.runInContext('fillTable("rp-sell-table",[{name:"ชาเย็น",qty:2}], 
 check("mobile report cells include column labels", "$('rp-sell-table').querySelector('tbody').innerHTML.includes('data-label=\"จำนวน\"')", true);
 vm.runInContext('fillTable("rp-sell-table",[],x=>[])', context);
 check("empty report explains missing daily entries", "$('rp-sell-table').querySelector('tbody').innerHTML.includes('ไม่มีรายการในวันที่เลือก')", true);
+vm.runInContext('activeTables = []; askCustomerName(12)', context);
+check("bar B1 preselects existing order slot 12", "$('cus-table').value", "12");
+check("bar labels are visible when opening a sale", "$('cus-table').innerHTML.includes('บาร์ B1') && $('cus-table').innerHTML.includes('บาร์ B8')", true);
+node("btn-cus-cancel").onclick();
+check("bar receipts show physical seat label", "receiptPayload({...singleReceipt,tableNo:12}).tableNo", "B1");
+check("receipt retains internal table ID before formatting", "receiptFromSale({tableNo:12}).tableNo", 12);
+vm.runInContext('askCustomerName(20)', context);
+check("overflow table remains available", "$('cus-table').value", "20");
+check("overflow table is clearly labeled", "$('cus-table').innerHTML.includes('โต๊ะเสริม 20')", true);
+node("btn-cus-cancel").onclick();
 console.log(`\n${passed} passed`);

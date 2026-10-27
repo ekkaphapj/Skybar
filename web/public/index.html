@@ -7,7 +7,7 @@
 <title>The Cottage Sky Bar POS</title>
 <link rel="icon" type="image/png" href="/logo.png">
 <link rel="stylesheet" href="/style.css?v=0b721e28e59f">
-<link rel="stylesheet" href="/restaurant.css?v=b43bc81d8fd9">
+<link rel="stylesheet" href="/restaurant.css?v=fcfc40b57329">
 </head>
 <body>
 <aside id="app-sidebar" class="app-sidebar hidden" aria-label="เมนูหลัก">
@@ -91,16 +91,17 @@
   <section id="restaurant-dashboard" aria-label="ภาพรวมร้านจำลอง">
     <div class="room-kpis">
       <article class="room-kpi kpi-sales"><span class="kpi-icon">฿</span><div><span>ยอดขายวันนี้</span><strong id="scene-revenue">—</strong><small>บาท · <span id="scene-business-date">กำลังโหลด</span></small></div><span class="kpi-spark" aria-hidden="true">✦</span></article>
-      <article class="room-kpi"><span class="kpi-icon green">▦</span><div><span>กำลังให้บริการ</span><strong><span id="scene-active">0</span><em> / 20 โต๊ะ</em></strong><small id="scene-free">กำลังโหลดสถานะโต๊ะ</small></div></article>
+      <article class="room-kpi"><span class="kpi-icon green">▦</span><div><span>กำลังให้บริการ</span><strong><span id="scene-active">0</span><em id="scene-capacity"> / 20 จุด</em></strong><small id="scene-free">กำลังโหลดสถานะโต๊ะ</small></div></article>
       <article class="room-kpi"><span class="kpi-icon peach">◷</span><div><span>ยอดรอเช็คบิล</span><strong id="scene-pending">0.00</strong><small>บาท · จากโต๊ะที่เปิดอยู่</small></div></article>
       <article class="room-kpi"><span class="kpi-icon purple">▤</span><div><span>บิลสำเร็จวันนี้</span><strong id="scene-bills">—</strong><small>บิล · รวมทุกช่องทางชำระ</small></div></article>
     </div>
     <div class="room-workspace">
       <div class="room-map-card">
-        <header class="room-map-heading"><div><p class="eyebrow">A LITTLE WORLD, YOUR RESTAURANT</p><h2>วันนี้ที่เดอะคอทเทจ <span>✦</span></h2></div><button class="btn room-refresh" id="scene-refresh">↻ รีเฟรช</button></header>
+        <header class="room-map-heading"><div><p class="eyebrow">THE COTTAGE · ROOFTOP SEAT PLAN</p><h2>ดาดฟ้าเดอะคอทเทจ <span>✦</span></h2></div><button class="btn room-refresh" id="scene-refresh">↻ รีเฟรช</button></header>
         <div class="room-toolbar"><div class="room-filters" role="group" aria-label="แสดงโต๊ะ"><button data-room-filter="all" aria-pressed="true">ทั้งหมด</button><button data-room-filter="busy" aria-pressed="false">กำลังขาย <b id="scene-busy-count">0</b></button><button data-room-filter="free" aria-pressed="false">โต๊ะว่าง</button></div><label class="room-shop"><span>ร้าน</span><select id="scene-shop"><option value="0">Sky Bar</option><option value="1">Mini Mart</option></select></label></div>
         <div class="room-stage" id="scene-map"></div>
-        <footer class="room-map-footer"><div><span class="legend-dot free"></span>โต๊ะว่าง <span class="legend-dot busy"></span>กำลังขาย <span class="legend-dot selected"></span>เลือกอยู่</div><span>ผังจำลอง · คลิกโต๊ะเพื่อรับออร์เดอร์</span></footer>
+        <section class="room-extra-seats" aria-labelledby="scene-extra-title"><h3 id="scene-extra-title">โต๊ะเสริม <small>นอกผังหลัก</small></h3><div id="scene-extra-tables"></div></section>
+        <footer class="room-map-footer"><div><span class="legend-dot free"></span>โต๊ะว่าง <span class="legend-dot busy"></span>กำลังขาย <span class="legend-dot selected"></span>เลือกอยู่</div><span>11 โต๊ะ · บาร์ B1–B8 · แยกโต๊ะเสริม</span></footer>
       </div>
       <aside class="room-detail-column"><section class="room-selected-card" id="scene-selected" aria-live="polite"></section><section class="room-activity-card"><header><h3>ออร์เดอร์ที่เปิดอยู่</h3><span id="scene-item-count" class="badge">0 รายการ</span></header><div id="scene-activity"></div></section></aside>
     </div>
@@ -554,11 +555,13 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<script src="/seat-plan.js?v=1c9e981ecad9"></script>
 <script src="/receipt.js?v=86f896260c92"></script>
-<script src="/printing.js?v=3cb01c07f523"></script>
-<script src="/restaurant.js?v=6276b6093587"></script>
+<script src="/printing.js?v=bb3f8ca4565e"></script>
+<script src="/rooftop.js?v=3735f6af1bf0"></script>
+<script src="/restaurant.js?v=878ad0022c28"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=47384f567771"></script>
-<script src="/app.js?v=e487f0396370"></script>
+<script src="/app.js?v=503095a862f0"></script>
 </body>
 </html>

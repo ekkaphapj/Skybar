@@ -70,7 +70,7 @@ function receiptPayload(rc, testOnly = false) {
     width: Number(localStorage.getItem("pos_paper_width") || 58) === 80 ? 48 : 32,
     shop: (rc.shopType ?? shopType) === 0 ? "THE COTTAGE SKY BAR" : "THE COTTAGE MINI MART",
     title: rc.paid ? (rc.isCopy ? "สำเนาใบเสร็จ / COPY" : "ใบเสร็จรับเงิน / RECEIPT") : "ใบแจ้งรายการ / BILL",
-    bill: rc.bill, date: rc.date, pay: rc.pay, owner: rc.owner, cus: rc.cus || "", tableNo: rc.tableNo,
+    bill: rc.bill, date: rc.date, pay: rc.pay, owner: rc.owner, cus: rc.cus || "", tableNo: Number(rc.tableNo) >= 12 && Number(rc.tableNo) <= 19 ? SeatPlan.shortLabel(rc.tableNo) : rc.tableNo,
     items: rc.lines, total: rc.total, footer: rc.paid ? (rc.isCopy ? "สำเนา · ชำระแล้ว / COPY · PAID" : "ชำระแล้ว / PAID") : "ยังไม่ชำระเงิน / UNPAID",
   };
 }
