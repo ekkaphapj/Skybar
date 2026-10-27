@@ -56,6 +56,7 @@ npm run test:logic          # unit test กฎวันที่ธุรกิ�
 npm run test:frontend       # ทดสอบตะกร้า/ส่วนลด/การแสดงชื่อสินค้า
 npm run test:delete         # ทดสอบสิทธิ์ลบ/ย้อนเงินสดและสต็อก/ลบพร้อมกัน (local เท่านั้น)
 npm run test:report         # ทดสอบสิทธิ์รายวัน/ข้อมูลภาพสรุป/แบ่งหน้า PNG (local เท่านั้น)
+npm run test:scene          # ทดสอบจำนวนคน/ตัวเลขฉากเต็มจอ/วันธุรกิจ/backup เดิม (local เท่านั้น)
 npm run test:regression     # ทดสอบคำขอพร้อมกันและสำรอง/นำเข้า (local เท่านั้น)
 npm run test                # integration test กับ BASE_URL (default localhost)
 # ชุด API tests เพิ่มข้อมูลจริงลงฐานทดสอบ ควรใช้ local ที่แยกจากข้อมูลใช้งาน

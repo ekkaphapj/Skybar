@@ -17,4 +17,9 @@ check('popular quantities and revenue come from real sales',d.popular.every(p=>[
 check('popular items are ranked by quantity',d.popular.every((p,i)=>!i||d.popular[i-1].qty>=p.qty));
 check('update timestamp is valid',Number.isFinite(Date.parse(d.updatedAt)));
 check('summary endpoint does not mutate business data',JSON.stringify(backup.tables)===JSON.stringify((await get('/api/export')).tables));
+const dailyAccounts=backup.tables.Account.filter(a=>a.Date1===meta.today);
+check('daily income includes all account receipts',Math.abs(d.dailyIncome-dailyAccounts.filter(a=>a.Type==='รายรับ').reduce((s,a)=>s+a.Amount,0))<.005);
+check('daily expenses match expense accounts',Math.abs(d.dailyExpense-dailyAccounts.filter(a=>a.Type==='รายจ่าย').reduce((s,a)=>s+a.Amount,0))<.005);
+check('current customer table count matches open orders',d.activeTables===backup.tables.TableOrders.filter(o=>o.Status==='open').length);
+check('today tables count uses opening visits with 02:00 cutoff',d.todayTables===backup.tables.TableOrders.filter(o=>new Date(Date.parse(o.OpenedAt)+5*3600000).toISOString().slice(0,10)===meta.today).length);
 console.log('\n'+count+' dashboard checks passed');

@@ -61,6 +61,8 @@ function applyIdentity(st) {
   $("current-user-name").textContent = currentUser ? "ผู้ใช้งาน: " + currentUser.displayName : "";
   document.querySelectorAll("[data-admin-only]").forEach(el => el.classList.toggle("hidden", currentUser?.role !== "admin"));
   resetReport();
+  tableLoadVersion++;
+  if (typeof RestaurantView !== "undefined") RestaurantView.reset?.();
 }
 async function loadMeta() { const st = await api("/api/auth/status"); applyIdentity(st); return st; }
 function fillSelect(sel, items, keepBlank = false) {
@@ -83,6 +85,7 @@ let currentView = "";
 async function route() {
   const name = (location.hash || "#/main").replace("#/", "");
   if (savingSell && name !== "sell") { navigate("sell"); return; }
+  if (name !== "main") await RestaurantView.leaveFullscreen();
   if (currentView === "sell" && name !== "sell" && name !== "login" && activeOrder) {
     try { await flushOrder(); }
     catch (e) { toastErr(e.message); navigate("sell"); return; }
@@ -155,8 +158,11 @@ function openPrinterSettings() {
   else { printerSettingsRequested = true; navigate("main"); }
 }
 let activeTables = [];
+let tableLoadVersion = 0;
 async function loadActiveTables() {
+  const version = ++tableLoadVersion;
   const [orders, dashboard] = await Promise.all([api("/api/orders"), api("/api/dashboard").catch(() => null)]);
+  if (version !== tableLoadVersion) return;
   activeTables = orders;
   RestaurantView.refresh(orders, dashboard);
   $("active-table-count").textContent = activeTables.length + " โต๊ะ";
@@ -173,6 +179,7 @@ function askCustomerName(preferredTable = null) {
     const form = $("cus-card");
     const input = $("cus-input");
     input.value = "";
+    $("cus-guests").value = "1";
     const busy = new Set(activeTables.map((order) => Number(order.tableNo)));
     $("cus-table").innerHTML = '<option value="">— เลือกโต๊ะ —</option>' +
       Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}"${busy.has(i + 1) ? " disabled" : ""}>${esc(SeatPlan.label(i + 1))}${busy.has(i + 1) ? " (กำลังขาย)" : ""}</option>`).join("");
@@ -193,14 +200,16 @@ function askCustomerName(preferredTable = null) {
       const v = input.value.trim();
       const tableNo = Number($("cus-table").value);
       if (!Number.isInteger(tableNo) || tableNo < 1 || tableNo > 20 || busy.has(tableNo)) { $("cus-error").classList.remove("hidden"); $("cus-table").focus(); return; }
-      done({ tableNo, cusName: v });
+      const guestCount = Number($("cus-guests").value || 1);
+      if (!Number.isInteger(guestCount) || guestCount < 1 || guestCount > 5) { toastErr("เลือกจำนวนลูกค้า 1–5 คน"); return; }
+      done({ tableNo, cusName: v, guestCount });
     };
     $("btn-cus-cancel").onclick = () => done(null);
     dialog.oncancel = (event) => { event.preventDefault(); done(null); };
     dialog.showModal();
   });
 }
-async function openSell(preferredTable = null) {
+async function openSell(preferredTable = null, stayInScene = false) {
   if (openingOrder) return;
   openingOrder = true;
   try {
@@ -211,6 +220,8 @@ async function openSell(preferredTable = null) {
   const selection = await askCustomerName(preferredTable);
   if (!selection) return;
   const order = await api("/api/orders", { method: "POST", body: { ...selection, shopType } });
+  RestaurantView.rememberOpened(order, stayInScene);
+  if (stayInScene) { await loadActiveTables(); toast("เปิด " + SeatPlan.label(order.tableNo) + " · ลูกค้า " + (order.guestCount || 1) + " คน"); return; }
   sessionStorage.setItem("selectedOrder", order.id);
   if (currentView === "sell") await initSell();
   else navigate("sell");
@@ -306,6 +317,7 @@ async function initSell() {
   const isSky = shopType === 0;
   $("sell-shopname").textContent = isSky ? "THE COTTAGE SKY BAR" : "THE COTTAGE MINI MART";
   $("sell-cusname").textContent = SeatPlan.label(order.tableNo);
+  $("sell-party-size").textContent = (order.guestCount || 1) + " คน";
   $("btn-print-bill").classList.toggle("hidden", !isSky);
   // qty options 1-20 (same as original)
   if (!$("sell-qty").options.length)

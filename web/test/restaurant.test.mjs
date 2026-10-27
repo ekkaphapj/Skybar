@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';import{readFileSync}from'node:fs';
-const context=vm.createContext({console});vm.runInContext(readFileSync('public/seat-plan.js','utf8'),context);vm.runInContext(readFileSync('public/rooftop.js','utf8'),context);vm.runInContext(readFileSync('public/restaurant.js','utf8'),context);const R=context.RestaurantView;let passed=0;
+const context=vm.createContext({console});vm.runInContext(readFileSync('public/seat-plan.js','utf8'),context);vm.runInContext(readFileSync('public/guests.js','utf8'),context);vm.runInContext(readFileSync('public/rooftop.js','utf8'),context);vm.runInContext(readFileSync('public/restaurant.js','utf8'),context);const R=context.RestaurantView;let passed=0;
 function check(label,value){assert.ok(value,label);passed++;console.log('  ok    '+label);}
 const orders=[{id:'one',tableNo:1,cusName:'ทดสอบ "<script>"',total:84,items:[{qty:2,typeName:'อาหาร',name:'ข้าว',price:100},{qty:1,typeName:'ส่วนลด',name:'ส่วนลด',price:-16}]},{id:'three',tableNo:3,cusName:'เอก',total:20,items:[{qty:1,name:'ชา',price:20}]}];
 const m=R.model(orders,{revenue:234.5,bills:4},3);
@@ -36,4 +36,15 @@ check('overflow stays outside the physical roof drawing',!svg.includes('id="scen
 check('additional table numbers are never silently dropped',R.extras([{tableNo:27,total:45}],27).includes('scene-table-27'));
 check('overflow count follows actual added tables',R.model([{tableNo:27,total:45}],null).capacity===21);
 check('rooftop is rendered with roof terrace and bar labels',svg.includes('ROOFTOP')&&svg.includes('data-seat-label="B8"')&&svg.includes('rooftop-night'));
+const party={id:'party',tableNo:2,guestCount:3,total:100,items:[]};
+const seated=R.scene([party],2);
+check('three guests appear at a three-person table',(seated.match(/data-guest-state="seated"/g)||[]).length===3);
+check('old orders show one person by default',(R.scene([{...party,guestCount:undefined}],2).match(/data-guest-state="seated"/g)||[]).length===1);
+const arriving=R.scene([party],2,'all',[{type:'arriving',order:party,elapsed:.3}]);
+check('arrivals walk in once for each guest',(arriving.match(/data-guest-state="arriving"/g)||[]).length===3);
+check('arrivals settle after walking',!R.scene([party],2,'all',[{type:'arriving',order:party,elapsed:4}]).includes('data-guest-state="arriving"'));
+const leaving=R.scene([],2,'all',[{type:'leaving',order:party,elapsed:.2}]);
+check('checkout guests walk out without remaining seated',(leaving.match(/data-guest-state="leaving"/g)||[]).length===3&&!leaving.includes('data-guest-state="seated"'));
+check('seated customers have a drinking animation',seated.includes('class="guest-drink"'));
+check('extra tables also show the recorded number of guests',(R.extras([{...party,tableNo:20,guestCount:5}],20).match(/data-guest-state="seated"/g)||[]).length===5);
 console.log('\n'+passed+' restaurant checks passed');

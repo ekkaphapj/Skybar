@@ -47,14 +47,21 @@ app.get("/api/billid", (c) => c.json({ billID: `${makeBillId()}-${crypto.randomU
 
 app.get("/api/dashboard", async (c) => {
   const date = businessDate();
-  const [sales, hourly, popular] = await c.env.DB.batch([
+  const [sales, hourly, popular, accountTotals, tableVisits] = await c.env.DB.batch([
     c.env.DB.prepare("SELECT COALESCE(SUM(Price), 0) AS total, COUNT(DISTINCT OrderID) AS bills FROM Sell WHERE Date1 = ?").bind(date),
     c.env.DB.prepare("SELECT CAST(substr(Time1, 1, 2) AS INTEGER) AS hour, SUM(Price) AS total FROM Sell WHERE Date1 = ? GROUP BY hour").bind(date),
     c.env.DB.prepare(`SELECT i.Name1 AS name, SUM(s.Amount) AS qty, SUM(s.Price) AS total FROM Sell s
       JOIN Items i ON i.ID = s.ItemID JOIN ItemType t ON t.ID = i.ItemTypeID
       WHERE s.Date1 = ? AND t.Name1 <> ? GROUP BY i.ID ORDER BY qty DESC, i.ID LIMIT 4`).bind(date, DISCOUNT_TYPE_NAME),
+    c.env.DB.prepare(`SELECT COALESCE(SUM(CASE WHEN Type = 'รายรับ' THEN Amount ELSE 0 END), 0) AS income,
+      COALESCE(SUM(CASE WHEN Type = 'รายจ่าย' THEN Amount ELSE 0 END), 0) AS expense FROM Account WHERE Date1 = ?`).bind(date),
+    // Bangkok UTC+7 with the business-day cutoff at 02:00 = UTC + 5 hours.
+    c.env.DB.prepare(`SELECT COUNT(CASE WHEN date(OpenedAt, '+5 hours') = ? THEN 1 END) AS todayTables,
+      COUNT(CASE WHEN Status = 'open' THEN 1 END) AS activeTables FROM TableOrders`).bind(date),
   ]);
   return c.json({ date, revenue: money(Number(sales.results[0]?.total || 0)), bills: Number(sales.results[0]?.bills || 0),
+    dailyIncome: money(Number(accountTotals.results[0]?.income || 0)), dailyExpense: money(Number(accountTotals.results[0]?.expense || 0)),
+    todayTables: Number(tableVisits.results[0]?.todayTables || 0), activeTables: Number(tableVisits.results[0]?.activeTables || 0),
     hourly: hourly.results, popular: popular.results, updatedAt: new Date().toISOString() });
 });
 
@@ -343,6 +350,7 @@ app.get("/api/vouchers/check/:id", async (c) => {
 function orderView(row: any) {
   return {
     id: row.ID, tableNo: row.TableNo, cusName: row.CustomerName, openedBy: row.OpenedBy, closedBy: row.ClosedBy,
+    guestCount: Number(row.GuestCount || 1),
     shopType: row.ShopType, billID: row.BillID, status: row.Status,
     items: JSON.parse(row.ItemsJSON), owner: row.Owner, roomNo: row.RoomNo,
     revision: row.Revision, openedAt: row.OpenedAt, closedAt: row.ClosedAt,
@@ -373,13 +381,15 @@ app.post("/api/orders", async (c) => {
   const b = await c.req.json().catch(() => ({}));
   const tableNo = Number(b.tableNo), shopType = Number(b.shopType ?? 0);
   const cusName = String(b.cusName ?? "").trim();
+  const guestCount = b.guestCount === undefined || b.guestCount === null || b.guestCount === "" ? 1 : Number(b.guestCount);
+  if (!Number.isInteger(guestCount) || guestCount < 1 || guestCount > 5 || typeof b.guestCount === "boolean") return bad(c, "เลือกจำนวนลูกค้า 1–5 คน");
   if (!Number.isInteger(tableNo) || tableNo < 1 || tableNo > 20) return bad(c, "เลือกโต๊ะ 1–20");
   if (![0, 1].includes(shopType) || cusName.length > 200) return bad(c, "ข้อมูลเปิดการขายไม่ถูกต้อง");
   const id = crypto.randomUUID(), billID = `${makeBillId()}-${crypto.randomUUID()}`;
   try {
     await c.env.DB.prepare(
-      "INSERT INTO TableOrders (ID, TableNo, CustomerName, ShopType, BillID, OpenedAt, Owner, OpenedBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(id, tableNo, cusName, shopType, billID, new Date().toISOString(), c.get("user").displayName, c.get("user").displayName).run();
+      "INSERT INTO TableOrders (ID, TableNo, CustomerName, ShopType, BillID, OpenedAt, Owner, OpenedBy, GuestCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(id, tableNo, cusName, shopType, billID, new Date().toISOString(), c.get("user").displayName, c.get("user").displayName, guestCount).run();
   } catch (err) {
     if (String(err).includes("UNIQUE constraint failed: TableOrders.TableNo")) return bad(c, "โต๊ะนี้เปิดการขายอยู่แล้ว กรุณาเปิดจากรายการโต๊ะ", 409);
     throw err;
@@ -555,6 +565,7 @@ async function completeSale(c: Context<Env>, b: any, order?: any) {
   const receipt = {
     ok: true, billID, date: today, time, shopType: Number(b.shopType ?? 0),
     cusName, roomNo, owner, paymentType, voucherId, tableNo: order?.TableNo ?? null,
+    guestCount: Number(order?.GuestCount || 1),
     total: paymentType === "Voucher" ? 0 : total,
     lines: lines.map((l) => ({ name: l.name, qty: l.qty, price: paymentType === "Voucher" ? 0 : l.price })),
   };
