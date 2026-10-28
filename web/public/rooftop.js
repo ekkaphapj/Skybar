@@ -33,9 +33,15 @@ globalThis.RooftopScene = (() => {
     for(let i=0;i<=count;i++){const t=i/count,x=p[0]+(q[0]-p[0])*t,y=p[1]+(q[1]-p[1])*t+48*t*(1-t);out+=`<circle cx="${x}" cy="${y}" r="10" fill="#ffcf64" opacity=".12"/><circle cx="${x}" cy="${y}" r="3.7" fill="#ffe3a0"/>`;}
     return out;
   }
-  function chair(x,y,busy,stool=false) {
+  function chair(x,y,busy,stool=false,faceX=0,faceY=-1) {
     const colors=busy?['#e9a16e','#a86143','#88503a']:['#bb9976','#896748','#705139'];
-    return box(x-.23,y-.23,.08,.46,.46,.53,colors)+(stool?'':box(x-.23,y+.15,.6,.46,.1,.55,colors));
+    const seat = box(x-.23,y-.23,.08,.46,.46,.53,colors);
+    if (stool) return seat;
+    // The backrest belongs on the edge away from the table, on either axis.
+    const back = Math.abs(faceX) > Math.abs(faceY)
+      ? box(x+(faceX>0?-.25:.15),y-.23,.6,.1,.46,.55,colors)
+      : box(x-.23,y+(faceY>0?-.25:.15),.6,.46,.1,.55,colors);
+    return seat + back;
   }
   const muted = (order,filter) => filter==='busy'&&!order||filter==='free'&&!!order;
   function nightSky() {
@@ -58,7 +64,7 @@ globalThis.RooftopScene = (() => {
     if(isBar) furniture=chair(x,y,busy,true)+disk(x,y,.68,.48,.48,busy?'#e5a47d':'#a4b695');
     else {
       const chairs=seats===4?[[x-.8,y-ry-.55],[x+.8,y-ry-.55],[x-.8,y+ry+.55],[x+.8,y+ry+.55]]:s.chairAxis==='x'?[[x-rx-.5,y],[x+rx+.5,y]]:[[x,y-ry-.5],[x,y+ry+.5]];
-      furniture=chairs.map(p=>chair(...p,busy)).join('')+disk(x,y,.02,rx+.5,ry+.45,'#5d4735','opacity=".12"')+box(x-.1,y-.1,.08,.2,.2,1.05,['#986849','#785239','#65452f']);
+      furniture=chairs.map(([px,py])=>chair(px,py,busy,false,x-px,y-py)).join('')+disk(x,y,.02,rx+.5,ry+.45,'#5d4735','opacity=".12"')+box(x-.1,y-.1,.08,.2,.2,1.05,['#986849','#785239','#65452f']);
       furniture+=shape==='square'?box(x-rx,y-ry,1.1,rx*2,ry*2,.18,['#718faf','#4c6b8d','#405d7e']):disk(x,y,1.09,rx,ry,shape==='oval'?'#5d83a0':'#496e9e')+disk(x,y,1.25,rx,ry,shape==='oval'?'#93b9d0':'#688fbe');
       if(busy) {const p=project(x+.4,y-.3,1.29);furniture+=`<ellipse cx="${p[0]}" cy="${p[1]}" rx="7" ry="3" fill="#fff1d5"/>`;}
     }
