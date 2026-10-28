@@ -186,12 +186,57 @@ function askCustomerName(preferredTable = null) {
     $("cus-table").value = "";
     if (Number.isInteger(preferredTable) && preferredTable >= 1 && preferredTable <= 20 && !busy.has(preferredTable)) $("cus-table").value = String(preferredTable);
     $("cus-error").classList.add("hidden");
+    const map = $("cus-seat-map"), viewport = $("cus-seat-map-viewport"), mapButton = $("btn-show-seat-map");
+    let mapActive = true;
+    const hideMap = () => { map.classList.add("hidden"); mapButton.setAttribute("aria-expanded", "false"); mapButton.textContent = "🗺️ ดูผังโต๊ะและเลือกโต๊ะ"; };
+    hideMap();
+    mapButton.onclick = async () => {
+      if (mapButton.disabled) return;
+      if (mapButton.getAttribute("aria-expanded") === "true") { hideMap(); return; }
+      mapButton.disabled = true;
+      try {
+        await loadActiveTables();
+        if (!mapActive) return;
+        busy.clear(); activeTables.forEach(order => busy.add(Number(order.tableNo)));
+        for (const option of $("cus-table").options) if (option.value) {
+          const n = Number(option.value); option.disabled = busy.has(n);
+          option.textContent = SeatPlan.label(n) + (busy.has(n) ? " (กำลังขาย)" : "");
+        }
+        if (busy.has(Number($("cus-table").value))) $("cus-table").value = "";
+        const selected = Number($("cus-table").value) || 0;
+        viewport.innerHTML = RooftopScene.scene(activeTables, selected).replace('viewBox="50 -160 1350 1010"', 'viewBox="90 130 1220 610"')
+          .replaceAll('id="scene-table-', 'id="mobile-seat-').replaceAll('id="rooftop-', 'id="mobile-rooftop-').replaceAll('url(#rooftop-', 'url(#mobile-rooftop-');
+        $("cus-seat-map-status").textContent = selected ? "เลือกอยู่: " + SeatPlan.label(selected) : "แตะโต๊ะว่างเพื่อเลือก";
+        map.classList.remove("hidden"); mapButton.setAttribute("aria-expanded", "true"); mapButton.textContent = "ซ่อนผังโต๊ะ";
+      } catch (e) { if (mapActive) toastErr(e.message); }
+      finally { if (mapActive) mapButton.disabled = false; }
+    };
+    $("btn-close-seat-map").onclick = hideMap;
+    const selectMapSeat = target => {
+      const seat = target.closest("[data-scene-table]");
+      if (!seat) return;
+      const n = Number(seat.dataset.sceneTable);
+      if (!Number.isInteger(n) || n < 1 || n > SeatPlan.capacity) return;
+      if (busy.has(n)) { $("cus-seat-map-status").textContent = SeatPlan.label(n) + " กำลังขาย กรุณาเลือกโต๊ะว่าง"; return; }
+      $("cus-table").value = String(n);
+      $("cus-error").classList.add("hidden");
+      hideMap();
+    };
+    viewport.onclick = event => selectMapSeat(event.target);
+    viewport.onkeydown = event => {
+      if (["Enter", " "].includes(event.key) && event.target.closest("[data-scene-table]")) {
+        event.preventDefault(); selectMapSeat(event.target);
+      }
+    };
     // Native modal focus is established by the browser. Refocusing from a card
     // click interferes with text selection and IME input in embedded browsers.
     const done = (name) => {
       form.onsubmit = null;
       dialog.oncancel = null;
       $("btn-cus-cancel").onclick = null;
+      mapActive = false; mapButton.disabled = false;
+      mapButton.onclick = null; $("btn-close-seat-map").onclick = null; viewport.onclick = null; viewport.onkeydown = null;
+      hideMap(); viewport.innerHTML = "";
       dialog.close();
       resolve(name);
     };

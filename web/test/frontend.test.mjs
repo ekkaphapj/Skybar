@@ -14,6 +14,8 @@ function node(id) {
     close() { this.open = false; },
     querySelector() { return node(id + ":tbody"); },
     querySelectorAll() { return []; },
+    setAttribute(name, value) { this['attr:' + name] = String(value); },
+    getAttribute(name) { return this['attr:' + name] ?? null; },
   });
   return nodes.get(id);
 }
@@ -252,4 +254,39 @@ check("opening form returns selected party size", "customerResult.guestCount", 5
 vm.runInContext('askCustomerName(4)', context);
 check("reopening does not reuse previous party size", "$('cus-guests').value", "1");
 node("btn-cus-cancel").onclick();
+node('cus-table').options = Array.from({length:20},(_,i)=>({value:String(i+1),disabled:false,textContent:''}));
+vm.runInContext(`
+  activeTables = [];
+  loadActiveTables = async () => { activeTables = [{tableNo:20}]; };
+  RooftopScene = {scene: () => '<svg viewBox="50 -160 1350 1010"><g id="scene-table-2"></g></svg>'};
+  askCustomerName(2);
+`, context);
+await node('btn-show-seat-map').onclick();
+check("mobile map opens after refreshing table status", "$('btn-show-seat-map').getAttribute('aria-expanded')", "true");
+check("newly occupied table becomes unavailable", "$('cus-table').options[19].disabled", true);
+check("mobile map uses separate element IDs", "$('cus-seat-map-viewport').innerHTML.includes('id=\"mobile-seat-2\"')", true);
+node('cus-seat-map-viewport').onclick({target:{closest:()=>({dataset:{sceneTable:'20'}})}});
+check("occupied mobile map seat cannot be selected", "$('cus-table').value", "2");
+check("occupied mobile map seat explains its status", "$('cus-seat-map-status').textContent.includes('กำลังขาย')", true);
+node('cus-seat-map-viewport').onclick({target:{closest:()=>({dataset:{sceneTable:'3'}})}});
+check("free mobile map seat updates the selected table", "$('cus-table').value", "3");
+check("selecting a seat closes the temporary map", "$('btn-show-seat-map').getAttribute('aria-expanded')", "false");
+await node('btn-show-seat-map').onclick();
+let mapKeyPrevented = false;
+node('cus-seat-map-viewport').onkeydown({key:'Enter',preventDefault(){mapKeyPrevented=true;},target:{closest:()=>({dataset:{sceneTable:'4'}})}});
+check("keyboard can select a free seat on the mobile map", "$('cus-table').value", "4");
+assert.ok(mapKeyPrevented, 'keyboard selection must not submit the form');
+node('btn-cus-cancel').onclick();
+vm.runInContext(`
+  activeTables = [];
+  var finishMapRefresh;
+  loadActiveTables = () => new Promise(resolve => { finishMapRefresh = resolve; });
+  askCustomerName(4);
+  var pendingSeatMap = $('btn-show-seat-map').onclick();
+`, context);
+node('btn-cus-cancel').onclick();
+vm.runInContext('finishMapRefresh()', context);
+await vm.runInContext('pendingSeatMap', context);
+check("late map refresh cannot reopen a cancelled dialog", "$('btn-show-seat-map').getAttribute('aria-expanded')", "false");
+check("late map refresh does not restore stale map content", "$('cus-seat-map-viewport').innerHTML", "");
 console.log(`\n${passed} passed`);

@@ -7,7 +7,7 @@
 <title>The Cottage Sky Bar POS</title>
 <link rel="icon" type="image/png" href="/logo.png">
 <link rel="stylesheet" href="/style.css?v=0b721e28e59f">
-<link rel="stylesheet" href="/restaurant.css?v=410acc106181">
+<link rel="stylesheet" href="/restaurant.css?v=1a822a086b83">
 </head>
 <body>
 <aside id="app-sidebar" class="app-sidebar hidden" aria-label="เมนูหลัก">
@@ -106,8 +106,7 @@
           <div><span>รายจ่ายวันนี้</span><strong id="scene-today-expense">—</strong><small>บาท</small></div>
         </div>
         <div class="room-stage" id="scene-map"></div>
-        <section class="room-extra-seats" aria-labelledby="scene-extra-title"><h3 id="scene-extra-title">โต๊ะเสริม <small>นอกผังหลัก</small></h3><div id="scene-extra-tables"></div></section>
-        <footer class="room-map-footer"><div><span class="legend-dot free"></span>โต๊ะว่าง <span class="legend-dot busy"></span>กำลังขาย <span class="legend-dot selected"></span>เลือกอยู่</div><span>11 โต๊ะ · บาร์ B1–B8 · แยกโต๊ะเสริม</span></footer>
+        <footer class="room-map-footer"><div><span class="legend-dot free"></span>โต๊ะว่าง <span class="legend-dot busy"></span>กำลังขาย <span class="legend-dot selected"></span>เลือกอยู่</div><span>11 โต๊ะ · บาร์ B1–B8 · โต๊ะเสริมสีเขียว</span></footer>
       </div>
       <aside class="room-detail-column"><section class="room-selected-card" id="scene-selected" aria-live="polite"></section><section class="room-activity-card"><header><h3>ออร์เดอร์ที่เปิดอยู่</h3><span id="scene-item-count" class="badge">0 รายการ</span></header><div id="scene-activity"></div></section></aside>
     </div>
@@ -487,6 +486,13 @@
   <form class="card narrow login-box" id="cus-card">
     <h3 id="cus-title">เปิดการขาย</h3>
     <label class="field"><span>เบอร์โต๊ะ</span><select id="cus-table" aria-label="เบอร์โต๊ะ" required></select></label>
+    <button type="button" class="btn mobile-map-toggle" id="btn-show-seat-map" aria-expanded="false" aria-controls="cus-seat-map">🗺️ ดูผังโต๊ะและเลือกโต๊ะ</button>
+    <div id="cus-seat-map" class="mobile-seat-map hidden">
+      <div class="mobile-seat-map-heading"><strong>ผังโต๊ะ</strong><button type="button" class="btn" id="btn-close-seat-map">ปิดผัง</button></div>
+      <p class="hint">เลื่อนผังซ้าย–ขวา แล้วแตะโต๊ะว่างเพื่อเลือก · สีส้มคือโต๊ะที่มีลูกค้า · โต๊ะเสริมสีเขียว</p>
+      <p id="cus-seat-map-status" class="hint" role="status"></p>
+      <div class="mobile-seat-map-viewport" id="cus-seat-map-viewport"></div>
+    </div>
     <label class="field"><span>จำนวนลูกค้า</span><select id="cus-guests" aria-label="จำนวนลูกค้า"><option value="1">1 คน</option><option value="2">2 คน</option><option value="3">3 คน</option><option value="4">4 คน</option><option value="5">5 คน</option></select></label>
     <label class="field"><span>ชื่อลูกค้า (ไม่จำเป็น)</span>
     <input type="text" inputmode="text" id="cus-input" name="customerName" aria-label="ชื่อลูกค้า" placeholder="ชื่อลูกค้า (ไม่จำเป็น)" maxlength="200" autocomplete="off">
@@ -566,14 +572,14 @@
 
 <div id="toast" class="toast hidden"></div>
 
-<script src="/seat-plan.js?v=1c9e981ecad9"></script>
+<script src="/seat-plan.js?v=74372b68ef0a"></script>
 <script src="/receipt.js?v=86f896260c92"></script>
 <script src="/printing.js?v=bb3f8ca4565e"></script>
-<script src="/guests.js?v=d82b212efa89"></script>
-<script src="/rooftop.js?v=17e8c029ad29"></script>
-<script src="/restaurant.js?v=9dc00718d2c9"></script>
+<script src="/guests.js?v=4caaf2939064"></script>
+<script src="/rooftop.js?v=83f59361ced7"></script>
+<script src="/restaurant.js?v=9961ed57f61c"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=47384f567771"></script>
-<script src="/app.js?v=2018304f3964"></script>
+<script src="/app.js?v=ac16f6803b21"></script>
 </body>
 </html>

@@ -21,7 +21,9 @@ globalThis.SeatPlan = (() => {
     const max = Math.max(19, Number(capacity) || 19);
     const extraIDs = new Set(Array.from({ length: Math.max(0, max - 19) }, (_, i) => i + 20));
     orders.forEach(o => { if (Number.isSafeInteger(Number(o.tableNo)) && Number(o.tableNo) >= 20) extraIDs.add(Number(o.tableNo)); });
-    return [...plan.map(s => ({ ...s })), ...Array.from(extraIDs).sort((a, b) => a - b).map(id => ({ id, shape: 'extra', seats: null }))];
+    // Reserve the open side of the terrace for extra tables.
+    const positions = [[22.7,4.2], [19.4,4.2], [22.7,1.2], [19.4,1.2]];
+    return [...plan.map(s => ({ ...s })), ...Array.from(extraIDs).sort((a, b) => a - b).map((id, i) => ({ id, shape: 'extra', seats: 4, x: positions[i % positions.length][0], y: positions[i % positions.length][1] }))];
   };
   return { label, shortLabel, entries, baseCount: 19, capacity: 20 };
 })();

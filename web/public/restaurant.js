@@ -43,7 +43,7 @@
       'scene-today-income': dashboard ? number(dashboard.dailyIncome) : '—', 'scene-today-expense': dashboard ? number(dashboard.dailyExpense) : '—' })) el(id).textContent = value;
     const phases = animationFrames();
     const nextMap = JSON.stringify([orders.map(o => [o.id, o.tableNo, o.total, o.cusName, o.guestCount]), selected, filter, phases.map(p => [p.order.id, p.type])]);
-    if (nextMap !== mapKey) { el('scene-map').innerHTML = scene(orders, selected, filter, phases); el('scene-extra-tables').innerHTML = RooftopScene.extras(orders, selected, filter, m.capacity, phases); mapKey = nextMap; }
+    if (nextMap !== mapKey) { el('scene-map').innerHTML = scene(orders, selected, filter, phases); mapKey = nextMap; }
     clearTimeout(animationTimer);
     if (phases.length) animationTimer = setTimeout(render, Math.max(50, Math.min(...phases.map(p => 4500 - (Date.now() - p.startedAt)))));
     const nextDetail = JSON.stringify([m.selected, selected]);
@@ -172,5 +172,5 @@
       if (item) { el('sell-qty').value = '1'; addToCart(item, false); button.classList.remove('just-added'); requestAnimationFrame(() => button.classList.add('just-added')); button.focus({ preventScroll: true }); }
     };
   }
-  root.RestaurantView = { scene, extras: RooftopScene.extras, model, countItems, wire, setView, loadMenu, refresh, rememberOpened, showCurrentBill, leaveFullscreen, reset, animationFrames };
+  root.RestaurantView = { scene, model, countItems, wire, setView, loadMenu, refresh, rememberOpened, showCurrentBill, leaveFullscreen, reset, animationFrames };
 })(globalThis);

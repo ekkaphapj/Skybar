@@ -42,9 +42,5 @@ globalThis.GuestAnimation = (() => {
     if (!order) return '';
     return group(order, positions(seat, count(order), project), phase, project(.3, 16.7, .1), project(6, 13, .1));
   }
-  function extra(order, phase) {
-    if (!order) return '';
-    return `<svg class="extra-guest-scene" viewBox="0 0 180 88" aria-hidden="true">${group(order, Array.from({length:count(order)}, (_,i) => [25 + i * 30, 75]), phase, [-10, 75], [80, 68])}</svg>`;
-  }
-  return { count, render, extra };
+  return { count, render };
 })();
