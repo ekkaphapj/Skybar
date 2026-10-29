@@ -477,6 +477,32 @@ async function checkVoucher() {
 }
 
 let savingSell = false;
+async function cancelOrder() {
+  if (savingSell || !activeOrder) return;
+  const order = activeOrder;
+  if (!confirm(`แน่ใจหรือไม่ว่าต้องการยกเลิกการขาย ${SeatPlan.label(order.tableNo)}?\nรายการทั้งหมดในบิลนี้จะถูกลบ และไม่บันทึกเป็นยอดขาย`)) return;
+  savingSell = true;
+  $("view-sell").inert = true;
+  $("app-sidebar").inert = true;
+  $("mobile-nav").inert = true;
+  try {
+    await flushOrder();
+    await api("/api/orders/" + encodeURIComponent(order.id) + "/cancel", {
+      method: "POST", body: { revision: order.revision },
+    });
+    activeOrder = null;
+    sessionStorage.removeItem("selectedOrder");
+    resetSell(false);
+    toast("ยกเลิกการขาย " + SeatPlan.label(order.tableNo) + " แล้ว");
+    navigate("main");
+  } catch (e) { toastErr(e.message); }
+  finally {
+    savingSell = false;
+    $("view-sell").inert = false;
+    $("app-sidebar").inert = false;
+    $("mobile-nav").inert = false;
+  }
+}
 async function saveSell() {
   if (savingSell) return;
   if (!activeOrder) { toastErr("เปิดโต๊ะก่อน"); return; }
@@ -948,6 +974,7 @@ function wire() {
 
   // sell
   $("btn-close-order").onclick = closeOrderView;
+  $("btn-cancel-order").onclick = cancelOrder;
   $("btn-reload-order").onclick = () => reloadOrder().catch((e) => toastErr(e.message));
   $("btn-refresh-tables").onclick = () => loadActiveTables().catch((e) => toastErr(e.message));
   for (const id of ["sell-cus", "sell-seller", "sell-room"]) $(id).onchange = queueOrderSave;

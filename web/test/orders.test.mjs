@@ -48,6 +48,37 @@ try {
   const closed = (await req("GET", "/api/orders/" + id)).data;
   check("closed receipt can be reopened", closed.status === "closed" && closed.receipt.lines[0].qty === 2);
   check("closed table cannot be edited", (await req("PUT", "/api/orders/" + id, { revision: 2, items: [], owner: "เอก" })).status === 409);
+  check("closed bill cannot be cancelled", (await req("POST", "/api/orders/" + id + "/cancel", { revision: closed.revision })).status === 409);
+  const beforeCancel = (await req("GET", "/api/export")).data;
+  const empty = (await req("POST", "/api/orders", { tableNo })).data;
+  check("cancellation requires a revision", (await req("POST", "/api/orders/" + empty.id + "/cancel", {})).status === 400);
+  check("empty table can be cancelled", (await req("POST", "/api/orders/" + empty.id + "/cancel", { revision: 0 })).status === 200);
+  const toCancel = (await req("POST", "/api/orders", { tableNo })).data;
+  await req("PUT", "/api/orders/" + toCancel.id, { revision: 0, items: [{ itemID, qty: 3 }] });
+  check("stale cancellation rejected", (await req("POST", "/api/orders/" + toCancel.id + "/cancel", { revision: 0 })).status === 409);
+  check("stale cancellation preserves the order", (await req("GET", "/api/orders/" + toCancel.id)).data.items[0].qty === 3);
+  const cancellations = await Promise.all([0, 1].map(() => req("POST", "/api/orders/" + toCancel.id + "/cancel", { revision: 1 })));
+  check("repeated cancellation succeeds only once", cancellations.filter(r => r.status === 200).length === 1 && cancellations.filter(r => r.status === 409).length === 1);
+  check("cancelled order is removed", (await req("GET", "/api/orders/" + toCancel.id)).status === 404);
+  check("cancelled order cannot checkout", (await req("POST", "/api/orders/" + toCancel.id + "/checkout", { revision: 1, paymentType: "เงินสด" })).status === 404);
+  check("cancelled bill has no receipt", (await req("GET", "/api/sell/receipt/" + toCancel.billID)).status === 404);
+  check("cancelling leaves all exported business data unchanged", JSON.stringify((await req("GET", "/api/export")).data.tables) === JSON.stringify(beforeCancel.tables));
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const racing = (await req("POST", "/api/orders", { tableNo })).data;
+    await req("PUT", "/api/orders/" + racing.id, { revision: 0, items: [{ itemID, qty: 1 }] });
+    const stockBefore = (await req("GET", "/api/items/" + itemID)).data.Amount;
+    const cashBefore = (await req("GET", "/api/cash/total")).data.total;
+    const [cancel, checkout] = await Promise.all([
+      req("POST", "/api/orders/" + racing.id + "/cancel", { revision: 1 }),
+      req("POST", "/api/orders/" + racing.id + "/checkout", { revision: 1, paymentType: "เงินสด" }),
+    ]);
+    check("cancel/checkout race has exactly one winner " + attempt, [cancel, checkout].filter(r => r.status === 200).length === 1 && [409, 404].includes(cancel.status === 200 ? checkout.status : cancel.status));
+    const sold = checkout.status === 200;
+    check("race stock and cash match the winner " + attempt, (await req("GET", "/api/items/" + itemID)).data.Amount === stockBefore - (sold ? 1 : 0) && (await req("GET", "/api/cash/total")).data.total === cashBefore + (sold ? 10 : 0));
+    check("race receipt matches the winner " + attempt, (await req("GET", "/api/sell/receipt/" + racing.billID)).status === (sold ? 200 : 404));
+  }
+  // Restore the pre-cancellation state for the remaining checkout assertions.
+  assert.equal((await req("POST", "/api/import", beforeCancel)).status, 200);
   const next = await req("POST", "/api/orders", { tableNo });
   check("table number reusable with a new bill", next.status === 200 && next.data.billID !== opened.data.billID);
   const raceOpen = await Promise.all([req("POST", "/api/orders", { tableNo: secondTable }), req("POST", "/api/orders", { tableNo: secondTable })]);

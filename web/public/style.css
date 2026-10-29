@@ -63,6 +63,7 @@ input:focus, select:focus { outline: 2px solid var(--primary); border-color: tra
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #221a05; font-weight: 700; }
 .btn.primary:hover { background: var(--primary-dark); }
 .btn.danger-outline { border-color: var(--danger); color: var(--danger); }
+.checkout-actions #btn-cancel-order { grid-column: 1 / -1; }
 .btn.big { padding: 14px 18px; font-size: 17px; }
 .btn.back { align-self: flex-start; }
 .actions { margin-top: 8px; }

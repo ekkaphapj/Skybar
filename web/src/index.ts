@@ -438,6 +438,16 @@ app.put("/api/orders/:id", async (c) => {
   return c.json({ ok: true, revision: revision + 1, total, items: normalized });
 });
 
+app.post("/api/orders/:id/cancel", async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  if (!Number.isSafeInteger(b.revision) || b.revision < 0) return bad(c, "ข้อมูลโต๊ะไม่ถูกต้อง");
+  const result = await c.env.DB.prepare(
+    "DELETE FROM TableOrders WHERE ID = ? AND Status = 'open' AND Revision = ?"
+  ).bind(c.req.param("id"), b.revision).run();
+  if (!result.meta.changes) return bad(c, "โต๊ะนี้ถูกแก้ไข ยกเลิก หรือเช็คบิลแล้ว กรุณาโหลดโต๊ะใหม่", 409);
+  return c.json({ ok: true });
+});
+
 app.post("/api/orders/:id/checkout", async (c) => {
   const row = await c.env.DB.prepare("SELECT * FROM TableOrders WHERE ID = ?").bind(c.req.param("id")).first();
   if (!row) return bad(c, "ไม่พบรายการโต๊ะ", 404);
@@ -570,6 +580,11 @@ async function completeSale(c: Context<Env>, b: any, order?: any) {
     lines: lines.map((l) => ({ name: l.name, qty: l.qty, price: paymentType === "Voucher" ? 0 : l.price })),
   };
   if (order) {
+    // Abort the whole sale if cancellation deleted the order after checkout read it.
+    // SQLite evaluates CASE lazily; invalid JSON deliberately fails the batch.
+    stmts.unshift(db.prepare(
+      "SELECT CASE WHEN EXISTS (SELECT 1 FROM TableOrders WHERE ID = ?) THEN 1 ELSE json('order_conflict') END"
+    ).bind(order.ID));
     stmts.unshift(db.prepare(
       `UPDATE TableOrders SET Status = 'closed', Revision = ?, ClosedAt = ?, BusinessDate = ?, PaymentType = ?, Total = ?, ReceiptJSON = ?, Owner = ?, ClosedBy = ? WHERE ID = ?`
     ).bind(Number(order.Revision) + 1, new Date().toISOString(), today, paymentType, receipt.total, JSON.stringify(receipt), owner, owner, order.ID));
@@ -580,7 +595,7 @@ async function completeSale(c: Context<Env>, b: any, order?: any) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.includes("duplicate_bill")) return bad(c, "เลขบิลนี้บันทึกแล้ว กรุณาค้นหาใบเสร็จเดิม", 409);
     if (message.includes("voucher_already_used")) return bad(c, "คูปองถูกใช้แล้ว");
-    if (message.includes("order_conflict")) return bad(c, "โต๊ะนี้ถูกแก้ไขหรือเช็คบิลจากอีกหน้าจอ กรุณาโหลดโต๊ะใหม่", 409);
+    if (message.includes("order_conflict") || (order && message.includes("malformed JSON"))) return bad(c, "โต๊ะนี้ถูกแก้ไข ยกเลิก หรือเช็คบิลจากอีกหน้าจอ กรุณาโหลดโต๊ะใหม่", 409);
     throw err;
   }
   return c.json(receipt);
