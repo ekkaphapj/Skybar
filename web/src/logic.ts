@@ -58,12 +58,6 @@ export function nowTime(now: Date = new Date()): string {
   return `${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}`;
 }
 
-/** Bill id = HHmmssddMMyyyy (Bangkok time), zero-padded variant of the original POS format */
-export function billId(now: Date = new Date()): string {
-  const p = bkkParts(now);
-  return `${pad(p.hour)}${pad(p.minute)}${pad(p.second)}${pad(p.day)}${pad(p.month)}${p.year}`;
-}
-
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }

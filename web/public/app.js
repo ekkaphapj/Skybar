@@ -711,6 +711,7 @@ let dailyReportUrls = [];
 let reportGeneration = 0;
 let reportRequest = 0;
 function clearReportImages() {
+  $("btn-download-report-all").disabled = true;
   dailyReportUrls.forEach(url => URL.revokeObjectURL(url));
   dailyReportUrls = []; dailyReportFiles = [];
   $("report-image-preview").innerHTML = "";
@@ -780,13 +781,29 @@ async function createTodayReport() {
     if (generation !== reportGeneration) return;
     dailyReportFiles = files;
     dailyReportUrls = dailyReportFiles.map(file => URL.createObjectURL(file));
+    $("btn-download-report-all").disabled = !files.length;
     $("report-image-preview").innerHTML = dailyReportUrls.map((url, i) => `<figure><img src="${url}" alt="สรุปการขายประจำวันที่ ${esc(report.from)} หน้า ${i + 1}"><figcaption><a class="btn" href="${url}" download="${dailyReportFiles[i].name}">ดาวน์โหลด PNG${dailyReportFiles.length > 1 ? " หน้า " + (i + 1) : ""}</a></figcaption></figure>`).join("");
     $("report-image-status").textContent = "รายงานวันที่ " + report.from + " · " + dailyReportFiles.length + " รูป";
     $("report-image-dialog").showModal();
   } catch (e) { clearReportImages(); toastErr(e.message); }
   finally { button.disabled = false; button.textContent = "สร้างรายงานวันนี้"; }
 }
-async function shareDailyReport() {
+async function downloadDailyReport() {
+  if (!dailyReportFiles.length || $("btn-download-report-all").disabled) return;
+  // The native file sheet lets mobile users save or forward all PNGs together.
+  // Keep the call inside the original tap so transient user activation is valid.
+  if (navigator.canShare?.({ files: dailyReportFiles }) && navigator.share) {
+    await shareDailyReport(true);
+    return;
+  }
+  for (let i = 0; i < dailyReportFiles.length; i++) {
+    const link = document.createElement("a");
+    link.href = dailyReportUrls[i]; link.download = dailyReportFiles[i].name;
+    document.body.appendChild(link); link.click(); link.remove();
+  }
+  $("report-image-status").textContent = `ส่งภาพ PNG ${dailyReportFiles.length} หน้าให้เบราว์เซอร์ดาวน์โหลดแล้ว หากมีคำถามให้อนุญาตดาวน์โหลดหลายไฟล์ หรือกดดาวน์โหลดใต้ภาพที่ต้องการ`;
+}
+async function shareDailyReport(saveImages = false) {
   if (!dailyReportFiles.length) return;
   const button = $("btn-share-report");
   if (button.disabled) return;
@@ -795,9 +812,11 @@ async function shareDailyReport() {
     return;
   }
   button.disabled = true;
+  $("btn-download-report-all").disabled = true;
+  if (saveImages) $("report-image-status").textContent = "เลือกบันทึกภาพ / บันทึกไปยังไฟล์ เพื่อเก็บ PNG ทุกหน้า หรือเลือก LINE เพื่อส่งต่อทุกภาพพร้อมกัน";
   try { await navigator.share({ files: dailyReportFiles, title: "สรุปการขาย The Cottage Sky Bar" }); }
   catch (e) { if (e.name !== "AbortError") $("report-image-status").textContent = "แชร์รูปไม่สำเร็จ กรุณาดาวน์โหลด PNG แล้วแนบใน LINE"; }
-  finally { button.disabled = false; }
+  finally { button.disabled = false; $("btn-download-report-all").disabled = !dailyReportFiles.length; }
 }
 function num(n) { return `<span class="num">${n}</span>`; }
 function deleteButton(attribute, value, label) {
@@ -1024,7 +1043,8 @@ function wire() {
   $("btn-report").onclick = loadReport;
   $("btn-report-today").onclick = () => { $("rp-from").value = businessDate(); $("rp-to").value = businessDate(); loadReport(); };
   $("btn-report-image").onclick = createTodayReport;
-  $("btn-share-report").onclick = shareDailyReport;
+  $("btn-download-report-all").onclick = downloadDailyReport;
+  $("btn-share-report").onclick = () => shareDailyReport();
   $("btn-close-report-image").onclick = clearReportImages;
   $("report-image-dialog").addEventListener("cancel", clearReportImages);
 

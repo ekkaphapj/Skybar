@@ -48,7 +48,7 @@ try {
   check('negative stock is visible', report.stockRemaining.some(x => x.name === 'รายงานสินค้าไทย' && x.amount === -2));
   check('discount pseudo item is absent from stock', !report.stockRemaining.some(x => x.name === 'ส่วนลดรายงาน'));
   check('cash balance includes carry forward', report.totalCashCumulative === tables.CASH.filter(x => x.Date1 <= today).reduce((s, x) => s + x.Amount, 0));
-  const context = vm.createContext({ Intl });
+  const context = vm.createContext({ Intl, Blob, TextEncoder });
   vm.runInContext(readFileSync(new URL('../public/report-image.js', import.meta.url), 'utf8'), context);
   const renderer = context.DailyReportImage;
   const measure = s => Array.from(s).length * 15;
@@ -57,9 +57,16 @@ try {
   check('layout includes authenticated author', pages.flatMap(p => p.blocks).some(b => b.type === 'author' && b.lines.join('').includes(report.generatedBy)));
   const large = { ...report, cashTx: Array.from({ length: 180 }, (_, i) => ({ type: 'รายรับ', amount: i, list: 'รายการภาษาไทยยาวมาก '.repeat(30) + i })) };
   const multipage = renderer.layout(large, measure);
-  check('large reports paginate within safe image height', multipage.length > 1 && multipage.every(p => p.height <= 2700));
-  const cashRows = multipage.flatMap(p => p.blocks).filter(b => b.type === 'row' && b.cells[0].join('').startsWith('รายการภาษาไทยยาวมาก'));
-  check('pagination retains every cash row', cashRows.length === 180);
+  check('large reports use consistent portrait pages', multipage.length > 1 && multipage.every(p => p.height === 1528));
+  check('all page content fits above the footer', multipage.every(p => p.blocks.every(b => b.y >= 244 && b.y + b.height <= 1418)));
+  let section = ''; const cashRows = [];
+  for (const page of multipage) for (const block of page.blocks) {
+    if (block.type === 'heading') section = block.title.slice(0, 2);
+    if (section === '03' && block.type === 'row') cashRows.push(block);
+  }
+  check('pagination retains every character of all cash rows', cashRows.map(b => b.cells[0].join('')).join('') === large.cashTx.map(x => x.list).join(''));
+  const extreme = renderer.layout({ ...report, generatedBy: 'ชื่อผู้ใช้ยาว '.repeat(300), stockRemaining: [{name:'สินค้าไทย '.repeat(1000), amount:1}] }, measure);
+  check('extreme names never overflow portrait pages', extreme.every(p => p.blocks.every(b => b.y + b.height <= 1418)));
   const long = renderer.wrap('ทดสอบภาษาไทย '.repeat(100), 300, measure);
   check('wrapping retains every Thai character', long.join('') === 'ทดสอบภาษาไทย '.repeat(100));
   check('wrapped text fits its column', long.every(s => measure(s) <= 300));

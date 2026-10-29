@@ -1,7 +1,7 @@
 /* Local PNG rendering: report data stays on the device until the user shares it. */
 "use strict";
 globalThis.DailyReportImage = (() => {
-  const W = 1080, M = 56, BOTTOM = 2540;
+  const W = 1080, H = 1528, M = 56, BOTTOM = H - 110;
   const font = '"Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif';
   const money = n => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const date = value => new Intl.DateTimeFormat('th-TH', { dateStyle: 'long', timeZone: 'Asia/Bangkok' }).format(new Date(value + 'T12:00:00+07:00'));
@@ -22,13 +22,13 @@ globalThis.DailyReportImage = (() => {
   function layout(r, measure) {
     if (r.from !== r.to) throw new Error('รูปสรุปต้องเป็นรายงานวันเดียว');
     const pages = []; let page, y;
-    const next = () => { page = { blocks: [], height: 0 }; pages.push(page); y = 244; };
-    const add = (block, height) => { page.blocks.push({ ...block, y, height }); y += height; page.height = y + 110; };
+    const next = () => { page = { blocks: [], height: H }; pages.push(page); y = 244; };
+    const add = (block, height) => { page.blocks.push({ ...block, y, height }); y += height; };
     next();
     const author = wrap('ผู้ออกรายงาน  ' + r.generatedBy, W - 2 * M, measure);
     for (let i = 0; i < author.length; i += 20) {
       const lines = author.slice(i, i + 20);
-      if (y + lines.length * 32 > BOTTOM) next();
+      if (y + lines.length * 32 + 18 > BOTTOM) next();
       add({ type: 'author', lines }, lines.length * 32 + 18);
     }
     if (y + 294 > BOTTOM) next();
@@ -40,7 +40,7 @@ globalThis.DailyReportImage = (() => {
     ] }, 294);
     const table = (title, headings, widths, rows, note = '') => {
       const heading = continued => {
-        if (y + 160 > BOTTOM) next();
+        if (y + (note ? 100 : 76) + 50 + 56 > BOTTOM) next();
         add({ type: 'heading', title: title + (continued ? ' (ต่อ)' : ''), note }, note ? 100 : 76);
         add({ type: 'columns', cells: headings, widths }, 50);
       };
@@ -50,14 +50,17 @@ globalThis.DailyReportImage = (() => {
         const lines = cells.map((cell, i) => wrap(cell, widths[i] - 32, measure));
         const maxLines = Math.max(...lines.map(a => a.length));
         // Split unusually long descriptions over pages without dropping text.
-        for (let start = 0; start < maxLines; start += 20) {
-          const part = lines.map(a => a.slice(start, start + 20));
-          const height = Math.max(...part.map(a => a.length)) * 32 + 24;
-          if (y + height > BOTTOM) { next(); heading(true); }
+        for (let start = 0; start < maxLines;) {
+          let capacity = Math.floor((BOTTOM - y - 24) / 32);
+          if (capacity < 1) { next(); heading(true); capacity = Math.floor((BOTTOM - y - 24) / 32); }
+          const count = Math.min(maxLines - start, capacity);
+          const part = lines.map(a => a.slice(start, start + count));
+          const height = count * 32 + 24;
           add({ type: 'row', cells: part, widths, stripe: index % 2 === 0 }, height);
+          start += count;
         }
       });
-      add({ type: 'space' }, 22);
+      if (y + 22 <= BOTTOM) add({ type: 'space' }, 22);
     };
     table('01  ยอดขายตามสินค้า', ['สินค้า', 'จำนวน', 'ยอดขาย (บาท)'], [600, 140, 228],
       r.sellByDate.map(x => [x.name, x.isDiscount ? '—' : String(x.qty), money(x.total)]), 'ยอดขายสุทธิ ' + money(r.totalIncome) + ' บาท · จำนวนชิ้นไม่รวมรายการส่วนลด');

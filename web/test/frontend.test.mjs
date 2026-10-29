@@ -16,6 +16,7 @@ function node(id) {
     querySelectorAll() { return []; },
     setAttribute(name, value) { this['attr:' + name] = String(value); },
     getAttribute(name) { return this['attr:' + name] ?? null; },
+    removeAttribute(name) { delete this['attr:' + name]; },
   });
   return nodes.get(id);
 }
@@ -172,20 +173,37 @@ vm.runInContext(`
   var revokedReportUrls = [], shareCalls = [];
   URL = { createObjectURL: () => 'blob:test-report', revokeObjectURL: url => revokedReportUrls.push(url) };
   navigator = { canShare: () => true, share: async data => shareCalls.push(data) };
-  DailyReportImage = { create: async () => [{name:'report.png',type:'image/png'}] };
+  DailyReportImage = { create: async () => [{name:'report.png',type:'image/png'},{name:'report-2.png',type:'image/png'}] };
   api = async () => ({from:'2026-10-27'});
 `, context);
 await vm.runInContext('createTodayReport()', context);
 check("generated report opens a preview", "$('report-image-dialog').open", true);
 check("report offers downloadable PNG", "$('report-image-preview').innerHTML.includes('download=\"report.png\"')", true);
+check("download-all enables after images are ready", "$('btn-download-report-all').disabled", false);
+await vm.runInContext('downloadDailyReport()', context);
+check("mobile save receives all PNG files in one action", "shareCalls[0].files.length", 2);
+check("mobile save receives images directly", "shareCalls[0].files.every(file => file.type === 'image/png')", true);
+check("mobile save explains native save options", "$('report-image-status').textContent.includes('บันทึกภาพ')", true);
 await vm.runInContext('shareDailyReport()', context);
 check("native sharing receives generated file", "shareCalls[0].files[0].name", "report.png");
 vm.runInContext('navigator.canShare = () => false;', context);
 await vm.runInContext('shareDailyReport()', context);
 check("unsupported sharing explains LINE fallback", "$('report-image-status').textContent.includes('แนบรูปในแชต LINE')", true);
+vm.runInContext(`
+  var pngDownloads = [], originalCreateElement = document.createElement;
+  document.createElement = tag => tag === 'a' ? {
+    click() { pngDownloads.push({name:this.download, href:this.href}); }, remove() {}
+  } : originalCreateElement(tag);
+`, context);
+await vm.runInContext('downloadDailyReport()', context);
+check("fallback downloads every PNG individually", "pngDownloads.length", 2);
+check("fallback retains first PNG filename", "pngDownloads[0].name", "report.png");
+check("fallback retains second PNG filename", "pngDownloads[1].name", "report-2.png");
+vm.runInContext('document.createElement = originalCreateElement;', context);
 vm.runInContext('resetReport()', context);
 check("identity reset clears generated files", "dailyReportFiles.length", 0);
-check("identity reset revokes preview object URLs", "revokedReportUrls.length", 1);
+check("identity reset revokes all image object URLs", "revokedReportUrls.length", 2);
+check("identity reset disables saving old images", "$('btn-download-report-all').disabled", true);
 check("identity reset closes report preview", "$('report-image-dialog').open", false);
 vm.runInContext(`
   var singlePrints = [];

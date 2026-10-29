@@ -5,7 +5,6 @@ import {
   VOUCHER_MAX_TOTAL,
   businessDate,
   nowTime,
-  billId as makeBillId,
   money,
   discountAmount,
   isValidDate,
@@ -43,7 +42,13 @@ app.get("/api/meta", (c) =>
   })
 );
 
-app.get("/api/billid", (c) => c.json({ billID: `${makeBillId()}-${crypto.randomUUID()}` }));
+async function nextBillId(db: D1Database): Promise<string> {
+  const row = await db.prepare("UPDATE BillSequence SET LastValue = LastValue + 1 WHERE ID = 1 RETURNING LastValue").first<{ LastValue: number }>();
+  if (!row) throw new Error("ไม่พบลำดับเลขบิล");
+  return String(row.LastValue);
+}
+
+app.get("/api/billid", async (c) => c.json({ billID: await nextBillId(c.env.DB) }));
 
 app.get("/api/dashboard", async (c) => {
   const date = businessDate();
@@ -385,7 +390,7 @@ app.post("/api/orders", async (c) => {
   if (!Number.isInteger(guestCount) || guestCount < 1 || guestCount > 5 || typeof b.guestCount === "boolean") return bad(c, "เลือกจำนวนลูกค้า 1–5 คน");
   if (!Number.isInteger(tableNo) || tableNo < 1 || tableNo > 20) return bad(c, "เลือกโต๊ะ 1–20");
   if (![0, 1].includes(shopType) || cusName.length > 200) return bad(c, "ข้อมูลเปิดการขายไม่ถูกต้อง");
-  const id = crypto.randomUUID(), billID = `${makeBillId()}-${crypto.randomUUID()}`;
+  const id = crypto.randomUUID(), billID = await nextBillId(c.env.DB);
   try {
     await c.env.DB.prepare(
       "INSERT INTO TableOrders (ID, TableNo, CustomerName, ShopType, BillID, OpenedAt, Owner, OpenedBy, GuestCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -773,14 +778,16 @@ const TABLES = ["ItemType", "Items", "Stock", "Sell", "StockTransaction", "Accou
 
 app.get("/api/export", async (c) => {
   const tables: Record<string, unknown[]> = {};
-  const results = await c.env.DB.batch(TABLES.map((t) => c.env.DB.prepare(`SELECT * FROM ${t}`)));
+  const results = await c.env.DB.batch([...TABLES.map((t) => c.env.DB.prepare(`SELECT * FROM ${t}`)),
+    c.env.DB.prepare("SELECT LastValue FROM BillSequence WHERE ID = 1")]);
   TABLES.forEach((t, i) => { tables[t] = results[i].results ?? []; });
-  return c.json({ exportedAt: new Date().toISOString(), tables });
+  return c.json({ exportedAt: new Date().toISOString(), billSequence: results[TABLES.length].results[0].LastValue, tables });
 });
 
 app.post("/api/import", async (c) => {
   const body = await c.req.json().catch(() => null);
   const data = body?.tables;
+  if (body?.billSequence !== undefined && (!Number.isSafeInteger(body.billSequence) || body.billSequence < 0)) return bad(c, "ลำดับเลขบิลในไฟล์สำรองไม่ถูกต้อง");
   if (!data || typeof data !== "object" || TABLES.filter((t) => t !== "TableOrders").some((t) => !Array.isArray(data[t]))) {
     return bad(c, "ไฟล์สำรองต้องมีข้อมูลครบทุกตาราง");
   }
@@ -814,6 +821,8 @@ app.post("/api/import", async (c) => {
     }
   }
   stmts.push(
+    // Keep the high-water mark even when restoring a backup or deleting bills.
+    db.prepare("UPDATE BillSequence SET LastValue = MAX(LastValue, ?) WHERE ID = 1").bind(body.billSequence ?? 0),
     db.prepare(`UPDATE sqlite_sequence SET seq = (SELECT MAX(ID) FROM ItemType) WHERE name = 'ItemType'`)
   );
   try {
