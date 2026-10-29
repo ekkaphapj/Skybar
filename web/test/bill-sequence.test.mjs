@@ -35,9 +35,9 @@ try {
   await req('POST', '/api/import', imported);
   check('backup preserves reserved and cancelled bill numbers', Number((await req('GET', '/api/billid')).billID) === high+1);
   const legacy = structuredClone(beforeRestore); delete legacy.billSequence;
-  const importedBill = high+100;
+  const importedBill = high+2;
   legacy.tables.TableOrders.find(x => x.ID === reopened.id).BillID = String(importedBill);
   await req('POST', '/api/import', legacy);
-  check('legacy imports advance sequence past existing short bills', Number((await req('GET', '/api/billid')).billID) === importedBill+1);
+  check('legacy imports skip colliding numeric bills', Number((await req('GET', '/api/billid')).billID) === importedBill+1);
 } finally { await req('POST', '/api/import', snapshot); }
 console.log(`${passed} bill sequence checks passed`);

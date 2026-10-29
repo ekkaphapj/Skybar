@@ -43,9 +43,18 @@ app.get("/api/meta", (c) =>
 );
 
 async function nextBillId(db: D1Database): Promise<string> {
-  const row = await db.prepare("UPDATE BillSequence SET LastValue = LastValue + 1 WHERE ID = 1 RETURNING LastValue").first<{ LastValue: number }>();
-  if (!row) throw new Error("ไม่พบลำดับเลขบิล");
-  return String(row.LastValue);
+  // Reserve centrally before checking historical bills. Legacy numeric IDs can
+  // be very large, so skip collisions rather than starting after their maximum.
+  for (;;) {
+    const row = await db.prepare("UPDATE BillSequence SET LastValue = LastValue + 1 WHERE ID = 1 RETURNING LastValue").first<{ LastValue: number }>();
+    if (!row) throw new Error("ไม่พบลำดับเลขบิล");
+    const id = String(row.LastValue);
+    const used = await db.prepare(`SELECT 1 FROM TableOrders WHERE BillID = ?
+      UNION ALL SELECT 1 FROM Sell WHERE OrderID = ?
+      UNION ALL SELECT 1 FROM Account WHERE BillID = ?
+      UNION ALL SELECT 1 FROM StockTransaction WHERE BillID = ? LIMIT 1`).bind(id, id, id, id).first();
+    if (!used) return id;
+  }
 }
 
 app.get("/api/billid", async (c) => c.json({ billID: await nextBillId(c.env.DB) }));
