@@ -132,11 +132,13 @@ app.delete("/api/item-types/:id", async (c) => {
     if (!Number.isSafeInteger(targetID) || targetID <= 0 || targetID === id) return bad(c, "เลือกประเภทปลายทางที่ต่างจากประเภทเดิม");
     const target = await db.prepare("SELECT ID FROM ItemType WHERE ID = ? AND Name1 <> ?").bind(targetID, DISCOUNT_TYPE_NAME).first();
     if (!target) return bad(c, "ไม่พบประเภทปลายทาง หรือเป็นประเภทส่วนลด");
-    statements.push(db.prepare(`UPDATE Items SET ItemTypeID = ? WHERE ItemTypeID = ?
+    statements.push(db.prepare(`UPDATE Items SET ItemTypeID = ?, ItemSubtypeID = NULL WHERE ItemTypeID = ?
       AND EXISTS (SELECT 1 FROM ItemType WHERE ID = ? AND Name1 <> ?)
       AND EXISTS (SELECT 1 FROM ItemType WHERE ID = ? AND Name1 <> ?)`)
       .bind(targetID, id, targetID, DISCOUNT_TYPE_NAME, id, DISCOUNT_TYPE_NAME));
   }
+  statements.push(db.prepare(`DELETE FROM ItemSubtype WHERE ItemTypeID = ?
+    AND NOT EXISTS (SELECT 1 FROM Items WHERE ItemTypeID = ?)` ).bind(id, id));
   // Move and delete together; never leave products orphaned or alter stock/history.
   statements.push(db.prepare(`DELETE FROM ItemType WHERE ID = ? AND Name1 <> ?
     AND NOT EXISTS (SELECT 1 FROM Items WHERE ItemTypeID = ?)`)
@@ -146,10 +148,64 @@ app.delete("/api/item-types/:id", async (c) => {
   return c.json({ ok: true, moved: targetID === undefined ? 0 : results[0].meta.changes });
 });
 
+app.get("/api/item-subtypes", async (c) => {
+  const typeID = c.req.query("typeID");
+  if (typeID && (!Number.isSafeInteger(Number(typeID)) || Number(typeID) <= 0)) return bad(c, "รหัสประเภทสินค้าไม่ถูกต้อง");
+  const { results } = await c.env.DB.prepare(`SELECT st.ID, st.ItemTypeID, st.Name1, COUNT(i.ID) AS itemCount
+    FROM ItemSubtype st LEFT JOIN Items i ON i.ItemSubtypeID = st.ID
+    ${typeID ? "WHERE st.ItemTypeID = ?" : ""} GROUP BY st.ID ORDER BY st.ItemTypeID, st.Name1`)
+    .bind(...(typeID ? [Number(typeID)] : [])).all();
+  return c.json(results);
+});
+
+app.post("/api/item-subtypes", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const b = await c.req.json().catch(() => ({}));
+  if (!Number.isSafeInteger(b.itemTypeId) || b.itemTypeId <= 0 || typeof b.name !== "string" || !b.name.trim() || b.name.trim().length > 100) return bad(c, "เลือกประเภทหลักและใส่ชื่อประเภทย่อยไม่เกิน 100 ตัวอักษร");
+  try {
+    const r = await c.env.DB.prepare(`INSERT INTO ItemSubtype (ItemTypeID, Name1)
+      SELECT ID, ? FROM ItemType WHERE ID = ? AND Name1 <> ?`).bind(b.name.trim(), b.itemTypeId, DISCOUNT_TYPE_NAME).run();
+    if (!r.meta.changes) return bad(c, "ไม่พบประเภทหลัก หรือเป็นประเภทส่วนลด");
+    return c.json({ ok: true, id: r.meta.last_row_id });
+  } catch { return bad(c, "มีประเภทย่อยชื่อนี้ในประเภทหลักแล้ว", 409); }
+});
+
+app.put("/api/item-subtypes/:id", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const id = Number(c.req.param("id")), b = await c.req.json().catch(() => ({}));
+  if (!Number.isSafeInteger(id) || id <= 0 || typeof b.name !== "string" || !b.name.trim() || b.name.trim().length > 100) return bad(c, "ใส่ชื่อประเภทย่อยไม่เกิน 100 ตัวอักษร");
+  try {
+    const r = await c.env.DB.prepare("UPDATE ItemSubtype SET Name1 = ? WHERE ID = ?").bind(b.name.trim(), id).run();
+    if (!r.meta.changes) return bad(c, "ไม่พบประเภทย่อย", 404);
+    return c.json({ ok: true });
+  } catch { return bad(c, "มีประเภทย่อยชื่อนี้ในประเภทหลักแล้ว", 409); }
+});
+
+app.delete("/api/item-subtypes/:id", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id <= 0) return bad(c, "รหัสประเภทย่อยไม่ถูกต้อง");
+  // ON DELETE SET NULL keeps every product, its balance, and transaction history.
+  const r = await c.env.DB.prepare("DELETE FROM ItemSubtype WHERE ID = ?").bind(id).run();
+  if (!r.meta.changes) return bad(c, "ไม่พบประเภทย่อย", 404);
+  return c.json({ ok: true });
+});
+
+app.put("/api/items/:id/subtype", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const id = Number(c.req.param("id")), b = await c.req.json().catch(() => ({}));
+  if (!Number.isSafeInteger(id) || id <= 0 || (b.itemSubtypeId !== null && (!Number.isSafeInteger(b.itemSubtypeId) || b.itemSubtypeId <= 0))) return bad(c, "เลือกประเภทย่อยให้ถูกต้อง");
+  const result = await c.env.DB.prepare(`UPDATE Items SET ItemSubtypeID = ? WHERE ID = ?
+    AND (? IS NULL OR EXISTS (SELECT 1 FROM ItemSubtype WHERE ID = ? AND ItemTypeID = Items.ItemTypeID))`)
+    .bind(b.itemSubtypeId, id, b.itemSubtypeId, b.itemSubtypeId).run();
+  if (!result.meta.changes) return bad(c, "ไม่พบสินค้า หรือประเภทย่อยไม่อยู่ในประเภทหลักของสินค้า", 409);
+  return c.json({ ok: true });
+});
+
 app.get("/api/items", async (c) => {
   const typeName = c.req.query("typeName");
-  let sql = `SELECT i.ID, i.Name1, i.Price, t.Name1 AS TypeName, IFNULL(s.Amount, 0) AS Amount
-             FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID`;
+  let sql = `SELECT i.ID, i.Name1, i.Price, i.ItemTypeID, i.ItemSubtypeID, st.Name1 AS SubtypeName, t.Name1 AS TypeName, IFNULL(s.Amount, 0) AS Amount
+             FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID LEFT JOIN ItemSubtype st ON st.ID = i.ItemSubtypeID`;
   const binds: unknown[] = [];
   if (typeName) {
     sql += " WHERE t.Name1 = ?";
@@ -164,8 +220,8 @@ app.get("/api/items/:id", async (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return bad(c, "รหัสสินค้าไม่ถูกต้อง");
   const row = await c.env.DB.prepare(
-    `SELECT i.ID, i.Name1, i.Price, t.Name1 AS TypeName, IFNULL(s.Amount, 0) AS Amount
-     FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID
+    `SELECT i.ID, i.Name1, i.Price, i.ItemTypeID, i.ItemSubtypeID, st.Name1 AS SubtypeName, t.Name1 AS TypeName, IFNULL(s.Amount, 0) AS Amount
+     FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID LEFT JOIN ItemSubtype st ON st.ID = i.ItemSubtypeID
      WHERE i.ID = ?`
   )
     .bind(id)
@@ -181,6 +237,7 @@ app.post("/api/items", async (c) => {
   const itemTypeId = Number(b.itemTypeId);
   const price = Number(b.price);
   const amount = Number(b.amount ?? 0);
+  const subtypeID = b.itemSubtypeId ?? null;
   const owner = c.get("user").displayName;
   let id = Number(b.id);
 
@@ -188,6 +245,7 @@ app.post("/api/items", async (c) => {
   if (!Number.isInteger(itemTypeId)) return bad(c, "เลือกประเภทสินค้า");
   const type = await c.env.DB.prepare("SELECT ID FROM ItemType WHERE ID = ?").bind(itemTypeId).first();
   if (!type) return bad(c, "เลือกประเภทสินค้า");
+  if (subtypeID !== null && (!Number.isSafeInteger(subtypeID) || !await c.env.DB.prepare("SELECT ID FROM ItemSubtype WHERE ID = ? AND ItemTypeID = ?").bind(subtypeID, itemTypeId).first())) return bad(c, "ประเภทย่อยไม่อยู่ในประเภทหลักที่เลือก");
   if (!Number.isFinite(price) || price < 0) return bad(c, "ใส่ราคาสินค้าไม่ถูกต้อง");
   if (!Number.isInteger(amount) || amount < 0) return bad(c, "ใส่จำนวนสินค้าไม่ถูกต้อง");
 
@@ -202,10 +260,10 @@ app.post("/api/items", async (c) => {
   const time = nowTime();
   const stmts: D1PreparedStatement[] = [];
   const itemStmt = Number.isInteger(id)
-    ? c.env.DB.prepare("INSERT INTO Items (ID, Name1, ItemTypeID, Date1, Owner, Price) VALUES (?, ?, ?, ?, ?, ?)")
-        .bind(id, name, itemTypeId, today, owner, price)
-    : c.env.DB.prepare("INSERT INTO Items (Name1, ItemTypeID, Date1, Owner, Price) VALUES (?, ?, ?, ?, ?)")
-        .bind(name, itemTypeId, today, owner, price);
+    ? c.env.DB.prepare("INSERT INTO Items (ID, Name1, ItemTypeID, Date1, Owner, Price, ItemSubtypeID) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(id, name, itemTypeId, today, owner, price, subtypeID)
+    : c.env.DB.prepare("INSERT INTO Items (Name1, ItemTypeID, Date1, Owner, Price, ItemSubtypeID) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(name, itemTypeId, today, owner, price, subtypeID);
   stmts.push(itemStmt);
   stmts.push(
     Number.isInteger(id)
@@ -870,7 +928,7 @@ async function report(c: Context<Env>, todayOnly = false) {
 
 /* ------------------------------ backup export / import ------------------------------ */
 
-const TABLES = ["ItemType", "Items", "Stock", "Sell", "StockTransaction", "Account", "CASH", "VOUCHER", "TableOrders"] as const;
+const TABLES = ["ItemType", "ItemSubtype", "Items", "Stock", "Sell", "StockTransaction", "Account", "CASH", "VOUCHER", "TableOrders"] as const;
 
 app.get("/api/export", async (c) => {
   const tables: Record<string, unknown[]> = {};
@@ -884,9 +942,11 @@ app.post("/api/import", async (c) => {
   const body = await c.req.json().catch(() => null);
   const data = body?.tables;
   if (body?.billSequence !== undefined && (!Number.isSafeInteger(body.billSequence) || body.billSequence < 0)) return bad(c, "ลำดับเลขบิลในไฟล์สำรองไม่ถูกต้อง");
-  if (!data || typeof data !== "object" || TABLES.filter((t) => t !== "TableOrders").some((t) => !Array.isArray(data[t]))) {
+  if (!data || typeof data !== "object" || TABLES.filter((t) => t !== "TableOrders" && t !== "ItemSubtype").some((t) => !Array.isArray(data[t]))) {
     return bad(c, "ไฟล์สำรองต้องมีข้อมูลครบทุกตาราง");
   }
+  if (data.ItemSubtype === undefined) data.ItemSubtype = [];
+  if (!Array.isArray(data.ItemSubtype)) return bad(c, "ข้อมูลประเภทย่อยในไฟล์สำรองไม่ถูกต้อง");
   if (!Array.isArray(data.TableOrders)) {
     if (data.TableOrders !== undefined) return bad(c, "ข้อมูลโต๊ะในไฟล์สำรองไม่ถูกต้อง");
     const existing = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM TableOrders").first();

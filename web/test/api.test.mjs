@@ -211,7 +211,7 @@ console.log("== receipt lookup 404 ==");
 console.log("== export ==");
 {
   const r = await req("GET", "/api/export");
-  ok("export has 9 tables including table orders", Object.keys(r.data.tables).length === 9);
+  ok("export includes subcategories and table orders", Object.keys(r.data.tables).length === 10 && Array.isArray(r.data.tables.ItemSubtype) && Array.isArray(r.data.tables.TableOrders));
   eqn("export items >= 4", r.data.tables.Items.length, 4);
 }
 

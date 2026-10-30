@@ -111,7 +111,7 @@ async function route() {
   if (name === "sell") await initSell();
   if (name === "stock") await initStock();
   if (name === "cash") initCash();
-  if (name === "additem") initAddItem();
+  if (name === "additem") await initAddItem();
   if (name === "products") await initProducts();
   if (name === "report") initReport();
   if (name === "receipt") initReceiptView();
@@ -756,7 +756,14 @@ async function saveDeposit() {
 
 /* ---------------- add item ---------------- */
 async function initAddItem() {
-  if ($("ai-type").options.length <= 1) await loadItemTypes();
+  for (const id of ["ai-type", "ai-subtype", "btn-save-item"]) $(id).disabled = true;
+  try {
+    await loadItemTypes();
+    await loadItemSubtypes();
+    fillSubtypeSelect($("ai-subtype"), Number($("ai-type").value));
+  } finally {
+    for (const id of ["ai-type", "ai-subtype", "btn-save-item"]) $(id).disabled = false;
+  }
 }
 async function saveItem() {
   try {
@@ -765,6 +772,7 @@ async function saveItem() {
       body: {
         name: $("ai-name").value,
         itemTypeId: Number($("ai-type").value) || undefined,
+        itemSubtypeId: $("ai-subtype").value ? Number($("ai-subtype").value) : null,
         price: $("ai-price").value,
         amount: $("ai-amount").value || "0",
         owner: $("ai-owner").value,
@@ -773,29 +781,101 @@ async function saveItem() {
     });
     toast("บันทึกรายการสินค้าสำเร็จ (รหัส " + res.id + ")");
     $("ai-name").value = ""; $("ai-id").value = ""; $("ai-price").value = ""; $("ai-amount").value = "0";
-    loadItemTypes();
+    await initAddItem();
   } catch (e) { toastErr(e.message); }
 }
 
 
 /* ---------------- product categories ---------------- */
 let productsRequest = 0;
+let itemSubtypes = [], managedSubtypeParent = null;
+async function loadItemSubtypes() { itemSubtypes = await api("/api/item-subtypes"); }
+function fillSubtypeSelect(select, parentID, selected = null) {
+  select.innerHTML = '<option value="">ไม่ระบุประเภทย่อย</option>' + itemSubtypes.filter(t => t.ItemTypeID === parentID).map(t => `<option value="${t.ID}">${esc(t.Name1)}</option>`).join("");
+  select.value = selected === null ? "" : String(selected);
+}
+function showSubtypeManagement(parentID) {
+  managedSubtypeParent = Number(parentID);
+  const parent = itemTypes.find(t => t.ID === managedSubtypeParent && t.Name1 !== "ส่วนลด");
+  $("subtype-management").classList.toggle("hidden", !parent);
+  if (!parent) { managedSubtypeParent = null; return; }
+  $("subtype-parent-title").textContent = "ประเภทย่อย · " + parent.Name1;
+  const rows = itemSubtypes.filter(t => t.ItemTypeID === parent.ID);
+  fillTable("subtype-table", rows, t => [esc(t.Name1), num(t.itemCount), `<div class="row"><button class="btn" data-edit-subtype="${t.ID}">แก้ไข</button><button class="btn danger" data-delete-subtype="${t.ID}">ลบประเภทย่อย</button></div>`]);
+  if (!rows.length) $("subtype-table").querySelector("tbody").innerHTML = '<tr><td colspan="3">ยังไม่มีประเภทย่อย เพิ่มได้จากปุ่มด้านบน</td></tr>';
+}
+function openSubtypeEditor(id = null) {
+  if (currentUser?.role !== "admin") return;
+  const sub = id === null ? null : itemSubtypes.find(t => t.ID === Number(id));
+  if (id !== null && !sub) return;
+  const parent = itemTypes.find(t => t.ID === (sub?.ItemTypeID ?? managedSubtypeParent));
+  if (!parent || parent.Name1 === "ส่วนลด") return;
+  $("subtype-title").textContent = sub ? "แก้ไขประเภทย่อย" : "เพิ่มประเภทย่อย";
+  $("subtype-parent-name").textContent = "ประเภทหลัก: " + parent.Name1;
+  $("subtype-parent-id").value = parent.ID;
+  $("subtype-id").value = sub?.ID || "";
+  $("subtype-name").value = sub?.Name1 || "";
+  $("subtype-error").textContent = "";
+  $("subtype-dialog").showModal();
+}
+async function saveSubtype(event) {
+  event.preventDefault();
+  if (currentUser?.role !== "admin") return;
+  const button = $("btn-save-subtype"), id = $("subtype-id").value;
+  button.disabled = true;
+  try {
+    await api("/api/item-subtypes" + (id ? "/" + id : ""), { method: id ? "PUT" : "POST", body: { name: $("subtype-name").value, itemTypeId: Number($("subtype-parent-id").value) } });
+    $("subtype-dialog").close(); toast("บันทึกประเภทย่อยแล้ว"); await initProducts();
+  } catch (e) { $("subtype-error").textContent = e.message; }
+  finally { button.disabled = false; }
+}
+async function deleteSubtype(id, button) {
+  if (currentUser?.role !== "admin" || button.disabled) return;
+  const sub = itemSubtypes.find(t => t.ID === Number(id));
+  if (!sub || !confirm(`ยืนยันลบประเภทย่อย “${sub.Name1}”? สินค้า ${sub.itemCount} รายการจะยังอยู่ในประเภทหลักเดิม โดยไม่ระบุประเภทย่อย ยอดสต็อกและประวัติไม่เปลี่ยนแปลง`)) return;
+  button.disabled = true;
+  try { await api("/api/item-subtypes/" + sub.ID, { method: "DELETE" }); toast("ลบประเภทย่อยแล้ว"); await initProducts(); }
+  catch (e) { toastErr(e.message); }
+  finally { button.disabled = false; }
+}
+async function openProductSubtypeEditor(id) {
+  if (currentUser?.role !== "admin") return;
+  const [item] = await Promise.all([api("/api/items/" + Number(id)), loadItemSubtypes()]);
+  $("product-subtype-item-id").value = item.ID;
+  $("product-subtype-name").textContent = item.Name1 + " · " + item.TypeName;
+  fillSubtypeSelect($("product-subtype-select"), item.ItemTypeID, item.ItemSubtypeID);
+  $("product-subtype-error").textContent = "";
+  $("product-subtype-dialog").showModal();
+}
+async function saveProductSubtype(event) {
+  event.preventDefault();
+  if (currentUser?.role !== "admin") return;
+  const button = $("btn-save-product-subtype"), value = $("product-subtype-select").value;
+  button.disabled = true;
+  try {
+    await api("/api/items/" + $("product-subtype-item-id").value + "/subtype", { method: "PUT", body: { itemSubtypeId: value ? Number(value) : null } });
+    $("product-subtype-dialog").close(); toast("บันทึกประเภทย่อยสินค้าแล้ว"); await initProducts();
+  } catch (e) { $("product-subtype-error").textContent = e.message; }
+  finally { button.disabled = false; }
+}
 async function initProducts() {
   const selectedType = $("products-type").value;
   await loadItemTypes();
+  await loadItemSubtypes();
   $("products-type").innerHTML = '<option value="">ทุกประเภท</option>' + itemTypes.map(t => `<option value="${esc(t.Name1)}">${esc(t.Name1)}</option>`).join("");
   if (itemTypes.some(t => t.Name1 === selectedType)) $("products-type").value = selectedType;
   $("item-type-table").querySelector("tbody").innerHTML = itemTypes.map(t => `<tr>
     <td data-label="ประเภทสินค้า">${esc(t.Name1)}</td><td data-label="จำนวนสินค้า">${num(t.itemCount)}</td>
-    <td data-label="จัดการ">${t.Name1 === "ส่วนลด" ? '<span class="hint">ประเภทพิเศษของระบบ</span>' : `<div class="row"><button class="btn" data-edit-item-type="${t.ID}">แก้ไข</button><button class="btn danger" data-delete-item-type="${t.ID}">ลบประเภท</button></div>`}</td></tr>`).join("");
+    <td data-label="จัดการ">${t.Name1 === "ส่วนลด" ? '<span class="hint">ประเภทพิเศษของระบบ</span>' : `<div class="row"><button class="btn" data-manage-subtypes="${t.ID}">ประเภทย่อย (${itemSubtypes.filter(st => st.ItemTypeID === t.ID).length})</button><button class="btn" data-edit-item-type="${t.ID}">แก้ไข</button><button class="btn danger" data-delete-item-type="${t.ID}">ลบประเภท</button></div>`}</td></tr>`).join("");
+  showSubtypeManagement(managedSubtypeParent);
   await loadProductsTable();
 }
 async function loadProductsTable() {
   const request = ++productsRequest;
   const rows = await api("/api/items?typeName=" + encodeURIComponent($("products-type").value));
   if (request !== productsRequest) return;
-  fillTable("products-table", rows, r => [r.ID, esc(r.Name1), esc(r.TypeName), r.TypeName === "ส่วนลด" ? num(r.Price) : fmt2(r.Price), num(r.Amount)]);
-  if (!rows.length) $("products-table").querySelector("tbody").innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีสินค้าในประเภทนี้</td></tr>';
+  fillTable("products-table", rows, r => [r.ID, esc(r.Name1), esc(r.TypeName), esc(r.SubtypeName || "ไม่ระบุ"), r.TypeName === "ส่วนลด" ? num(r.Price) : fmt2(r.Price), num(r.Amount), r.TypeName === "ส่วนลด" ? "-" : `<button class="btn" data-product-subtype="${r.ID}">กำหนดประเภทย่อย</button>`]);
+  if (!rows.length) $("products-table").querySelector("tbody").innerHTML = '<tr class="empty-row"><td colspan="7">ยังไม่มีสินค้าในประเภทนี้</td></tr>';
 }
 function openItemTypeEditor(id = null) {
   if (currentUser?.role !== "admin") return;
@@ -1096,6 +1176,14 @@ function wire() {
       queueOrderSave();
       return;
     }
+    const manageSub = e.target.closest("[data-manage-subtypes]");
+    if (manageSub) { showSubtypeManagement(manageSub.dataset.manageSubtypes); $("subtype-management").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+    const editSub = e.target.closest("[data-edit-subtype]");
+    if (editSub) { openSubtypeEditor(editSub.dataset.editSubtype); return; }
+    const deleteSub = e.target.closest("[data-delete-subtype]");
+    if (deleteSub) { deleteSubtype(deleteSub.dataset.deleteSubtype, deleteSub); return; }
+    const productSub = e.target.closest("[data-product-subtype]");
+    if (productSub) { openProductSubtypeEditor(productSub.dataset.productSubtype).catch(e => toastErr(e.message)); return; }
     const editType = e.target.closest("[data-edit-item-type]");
     if (editType) { openItemTypeEditor(editType.dataset.editItemType); return; }
     const deleteType = e.target.closest("[data-delete-item-type]");
@@ -1200,6 +1288,12 @@ function wire() {
   $("btn-deposit").onclick = saveDeposit;
 
   // product management
+  $("btn-add-subtype").onclick = () => openSubtypeEditor();
+  $("subtype-form").onsubmit = saveSubtype;
+  $("btn-cancel-subtype").onclick = () => $("subtype-dialog").close();
+  $("product-subtype-form").onsubmit = saveProductSubtype;
+  $("btn-cancel-product-subtype").onclick = () => $("product-subtype-dialog").close();
+  $("ai-type").onchange = () => fillSubtypeSelect($("ai-subtype"), Number($("ai-type").value));
   $("btn-add-item-type").onclick = () => openItemTypeEditor();
   $("item-type-form").onsubmit = saveItemType;
   $("btn-cancel-item-type").onclick = () => $("item-type-dialog").close();

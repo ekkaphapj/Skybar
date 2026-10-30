@@ -396,6 +396,7 @@
   <div class="card narrow">
     <div class="row">
       <label class="field"><span>ประเภทสินค้า</span><select id="ai-type"></select></label>
+      <label class="field"><span>ประเภทย่อย</span><select id="ai-subtype"><option value="">ไม่ระบุประเภทย่อย</option></select></label>
       <label class="field"><span>ชื่อสินค้า</span><input id="ai-name"></label>
     </div>
     <div class="row">
@@ -428,6 +429,11 @@
       <thead><tr><th>ประเภทสินค้า</th><th>จำนวนสินค้า</th><th>จัดการ</th></tr></thead><tbody></tbody>
     </table>
   </div>
+  <div class="card hidden" id="subtype-management">
+    <div class="row"><h3 id="subtype-parent-title">ประเภทย่อย</h3><button class="btn primary" id="btn-add-subtype">＋ เพิ่มประเภทย่อย</button></div>
+    <p class="hint">ประเภทย่อยอยู่ภายใต้ประเภทหลักนี้เท่านั้น ลบประเภทย่อยแล้วสินค้ายังคงอยู่ โดยไม่ระบุประเภทย่อย</p>
+    <table class="tbl mobile-records" id="subtype-table"><thead><tr><th>ประเภทย่อย</th><th>จำนวนสินค้า</th><th>จัดการ</th></tr></thead><tbody></tbody></table>
+  </div>
   <div class="card">
     <h3>รายการสินค้า</h3>
     <div class="row">
@@ -435,7 +441,7 @@
       <button class="btn" id="btn-refresh-products">โหลดข้อมูลใหม่</button>
     </div>
     <table class="tbl mobile-records" id="products-table">
-      <thead><tr><th>รหัส</th><th>สินค้า</th><th>ประเภท</th><th>ราคา (บาท)</th><th>คงเหลือ</th></tr></thead><tbody></tbody>
+      <thead><tr><th>รหัส</th><th>สินค้า</th><th>ประเภท</th><th>ประเภทย่อย</th><th>ราคา (บาท)</th><th>คงเหลือ</th><th>จัดการ</th></tr></thead><tbody></tbody>
     </table>
   </div>
 </section>
@@ -454,9 +460,28 @@
     <input type="hidden" id="delete-item-type-id">
     <p id="delete-item-type-summary"></p>
     <label class="field" id="delete-item-type-target-field"><span>ย้ายสินค้าทั้งหมดไปประเภท</span><select id="delete-item-type-target"></select></label>
-    <p class="hint">การลบประเภทไม่ลบสินค้า สต็อก หรือประวัติธุรกรรม</p>
+    <p class="hint">การลบประเภทจะลบประเภทย่อยภายในด้วย สินค้าที่ย้ายจะไม่ระบุประเภทย่อย โดยไม่ลบสินค้า สต็อก หรือประวัติธุรกรรม</p>
     <p id="delete-item-type-error" class="error" role="status"></p>
     <div class="row"><button class="btn danger" id="btn-confirm-delete-item-type" type="submit">ยืนยันลบประเภท</button><button class="btn" type="button" id="btn-cancel-delete-item-type">ยกเลิก</button></div>
+  </form>
+</dialog>
+
+<dialog id="subtype-dialog" class="customer-dialog" aria-labelledby="subtype-title">
+  <form id="subtype-form" class="card">
+    <h3 id="subtype-title">เพิ่มประเภทย่อย</h3><p id="subtype-parent-name"></p>
+    <input type="hidden" id="subtype-id"><input type="hidden" id="subtype-parent-id">
+    <label class="field"><span>ชื่อประเภทย่อย</span><input id="subtype-name" required maxlength="100"></label>
+    <p id="subtype-error" class="error" role="status"></p>
+    <div class="row"><button class="btn primary" id="btn-save-subtype" type="submit">บันทึก</button><button class="btn" id="btn-cancel-subtype" type="button">ยกเลิก</button></div>
+  </form>
+</dialog>
+<dialog id="product-subtype-dialog" class="customer-dialog" aria-labelledby="product-subtype-title">
+  <form id="product-subtype-form" class="card">
+    <h3 id="product-subtype-title">กำหนดประเภทย่อยสินค้า</h3><p id="product-subtype-name"></p>
+    <input type="hidden" id="product-subtype-item-id">
+    <label class="field"><span>ประเภทย่อย</span><select id="product-subtype-select"></select></label>
+    <p id="product-subtype-error" class="error" role="status"></p>
+    <div class="row"><button class="btn primary" id="btn-save-product-subtype" type="submit">บันทึก</button><button class="btn" id="btn-cancel-product-subtype" type="button">ยกเลิก</button></div>
   </form>
 </dialog>
 
@@ -659,6 +684,6 @@
 <script src="/restaurant.js?v=9961ed57f61c"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=fe139e5e6cd0"></script>
-<script src="/app.js?v=1fa09b08c157"></script>
+<script src="/app.js?v=5d11cf5cf3f4"></script>
 </body>
 </html>
