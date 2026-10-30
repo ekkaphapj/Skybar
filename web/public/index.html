@@ -19,6 +19,7 @@
   <button class="nav-link" data-nav="stock">▤ <span>สต็อก / รายรับรายจ่าย</span></button>
   <button class="nav-link" data-nav="report">▥ <span>รายงาน</span></button>
   <span class="nav-label">จัดการร้าน</span>
+  <button class="nav-link" data-nav="products" data-admin-only>▦ <span>จัดการสินค้า</span></button>
   <button class="nav-link" data-nav="additem" data-admin-only>＋ <span>เพิ่มสินค้า</span></button>
   <button class="nav-link" data-nav="receipt">⌕ <span>ค้นหาใบเสร็จ</span></button>
   <button class="nav-link" data-nav="voucher">◇ <span>Voucher</span></button>
@@ -130,6 +131,7 @@
       <button class="btn primary big open-sale-button" data-nav="sell">＋ เปิดการขาย</button>
       <button class="btn big" data-nav="history">🗂️ ประวัติการขาย</button>
       <button class="btn big" data-nav="stock">📦 สต็อก / รายรับรายจ่าย</button>
+      <button class="btn big" data-nav="products" data-admin-only>▦ จัดการสินค้า</button>
       <button class="btn big" data-nav="additem" data-admin-only>➕ เพิ่มสินค้า</button>
       <button class="btn big" data-nav="report">📊 รายงาน</button>
       <button class="btn big" data-nav="receipt">🔍 ค้นหาใบเสร็จ</button>
@@ -412,6 +414,52 @@
   </div>
 </section>
 
+<!-- ============ PRODUCT MANAGEMENT ============ -->
+<section id="view-products" class="view hidden">
+  <header class="page-header">
+    <button class="btn back" data-nav="main">← กลับ</button>
+    <div class="page-title">▦ จัดการสินค้า</div>
+    <button class="btn primary" data-nav="additem">＋ เพิ่มสินค้า</button>
+  </header>
+  <div class="card">
+    <div class="row"><h3 class="grow">ประเภทสินค้า</h3><button class="btn primary" id="btn-add-item-type">＋ เพิ่มประเภทสินค้า</button></div>
+    <p class="hint">แก้ไขชื่อประเภทได้ หากประเภทที่ต้องการลบมีสินค้า ให้เลือกประเภทปลายทางเพื่อย้ายสินค้า ยอดสต็อกจะคงเดิม</p>
+    <table class="tbl mobile-records" id="item-type-table">
+      <thead><tr><th>ประเภทสินค้า</th><th>จำนวนสินค้า</th><th>จัดการ</th></tr></thead><tbody></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h3>รายการสินค้า</h3>
+    <div class="row">
+      <label class="field grow"><span>ประเภทสินค้า</span><select id="products-type"><option value="">ทุกประเภท</option></select></label>
+      <button class="btn" id="btn-refresh-products">โหลดข้อมูลใหม่</button>
+    </div>
+    <table class="tbl mobile-records" id="products-table">
+      <thead><tr><th>รหัส</th><th>สินค้า</th><th>ประเภท</th><th>ราคา (บาท)</th><th>คงเหลือ</th></tr></thead><tbody></tbody>
+    </table>
+  </div>
+</section>
+<dialog id="item-type-dialog" class="customer-dialog" aria-labelledby="item-type-title">
+  <form id="item-type-form" class="card">
+    <h3 id="item-type-title">เพิ่มประเภทสินค้า</h3>
+    <input type="hidden" id="item-type-id">
+    <label class="field"><span>ชื่อประเภทสินค้า</span><input id="item-type-name" required maxlength="100"></label>
+    <p id="item-type-error" class="error" role="status"></p>
+    <div class="row"><button class="btn primary" id="btn-save-item-type" type="submit">บันทึก</button><button class="btn" type="button" id="btn-cancel-item-type">ยกเลิก</button></div>
+  </form>
+</dialog>
+<dialog id="delete-item-type-dialog" class="customer-dialog" aria-labelledby="delete-item-type-title">
+  <form id="delete-item-type-form" class="card">
+    <h3 id="delete-item-type-title">ลบประเภทสินค้า</h3>
+    <input type="hidden" id="delete-item-type-id">
+    <p id="delete-item-type-summary"></p>
+    <label class="field" id="delete-item-type-target-field"><span>ย้ายสินค้าทั้งหมดไปประเภท</span><select id="delete-item-type-target"></select></label>
+    <p class="hint">การลบประเภทไม่ลบสินค้า สต็อก หรือประวัติธุรกรรม</p>
+    <p id="delete-item-type-error" class="error" role="status"></p>
+    <div class="row"><button class="btn danger" id="btn-confirm-delete-item-type" type="submit">ยืนยันลบประเภท</button><button class="btn" type="button" id="btn-cancel-delete-item-type">ยกเลิก</button></div>
+  </form>
+</dialog>
+
 <!-- ============ REPORT ============ -->
 <section id="view-report" class="view hidden">
   <header class="page-header">
@@ -611,6 +659,6 @@
 <script src="/restaurant.js?v=9961ed57f61c"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=fe139e5e6cd0"></script>
-<script src="/app.js?v=3356bf30a0b6"></script>
+<script src="/app.js?v=1fa09b08c157"></script>
 </body>
 </html>

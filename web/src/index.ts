@@ -82,19 +82,68 @@ app.get("/api/dashboard", async (c) => {
 /* ------------------------------ item types & items ------------------------------ */
 
 app.get("/api/item-types", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT ID, Name1 FROM ItemType ORDER BY ID").all();
+  const { results } = await c.env.DB.prepare("SELECT t.ID, t.Name1, COUNT(i.ID) AS itemCount FROM ItemType t LEFT JOIN Items i ON i.ItemTypeID = t.ID GROUP BY t.ID ORDER BY t.ID").all();
   return c.json(results);
 });
 
 app.post("/api/item-types", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
   const { name } = await c.req.json().catch(() => ({ name: undefined }));
-  if (!name || !String(name).trim()) return bad(c, "ใส่ชื่อประเภทสินค้า");
+  if (typeof name !== "string" || !name.trim() || name.trim().length > 100) return bad(c, "ใส่ชื่อประเภทสินค้าไม่เกิน 100 ตัวอักษร");
   try {
     const r = await c.env.DB.prepare("INSERT INTO ItemType (Name1) VALUES (?)").bind(String(name).trim()).run();
     return c.json({ ok: true, id: r.meta.last_row_id });
   } catch {
     return bad(c, "มีประเภทสินค้านี้อยู่แล้ว");
   }
+});
+
+app.put("/api/item-types/:id", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id <= 0) return bad(c, "รหัสประเภทสินค้าไม่ถูกต้อง");
+  const { name } = await c.req.json().catch(() => ({}));
+  if (typeof name !== "string" || !name.trim() || name.trim().length > 100) return bad(c, "ใส่ชื่อประเภทสินค้าไม่เกิน 100 ตัวอักษร");
+  if (name.trim() === DISCOUNT_TYPE_NAME) return bad(c, "ประเภทส่วนลดเป็นประเภทพิเศษของระบบ");
+  const type = await c.env.DB.prepare("SELECT Name1 FROM ItemType WHERE ID = ?").bind(id).first<{ Name1: string }>();
+  if (!type) return bad(c, "ไม่พบประเภทสินค้า", 404);
+  if (type.Name1 === DISCOUNT_TYPE_NAME) return bad(c, "ไม่สามารถแก้ไขประเภทส่วนลดได้");
+  try {
+    const result = await c.env.DB.prepare("UPDATE ItemType SET Name1 = ? WHERE ID = ? AND Name1 <> ?").bind(name.trim(), id, DISCOUNT_TYPE_NAME).run();
+    if (!result.meta.changes) return bad(c, "ประเภทสินค้าเปลี่ยนแปลงแล้ว กรุณาโหลดใหม่", 409);
+    return c.json({ ok: true });
+  } catch {
+    return bad(c, "มีประเภทสินค้านี้อยู่แล้ว", 409);
+  }
+});
+
+app.delete("/api/item-types/:id", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id <= 0) return bad(c, "รหัสประเภทสินค้าไม่ถูกต้อง");
+  const db = c.env.DB;
+  const type = await db.prepare("SELECT Name1 FROM ItemType WHERE ID = ?").bind(id).first<{ Name1: string }>();
+  if (!type) return bad(c, "ไม่พบประเภทสินค้า", 404);
+  if (type.Name1 === DISCOUNT_TYPE_NAME) return bad(c, "ไม่สามารถลบประเภทส่วนลดได้");
+  const b = await c.req.json().catch(() => ({}));
+  const targetID = b.targetTypeId;
+  const statements: D1PreparedStatement[] = [];
+  if (targetID !== undefined) {
+    if (!Number.isSafeInteger(targetID) || targetID <= 0 || targetID === id) return bad(c, "เลือกประเภทปลายทางที่ต่างจากประเภทเดิม");
+    const target = await db.prepare("SELECT ID FROM ItemType WHERE ID = ? AND Name1 <> ?").bind(targetID, DISCOUNT_TYPE_NAME).first();
+    if (!target) return bad(c, "ไม่พบประเภทปลายทาง หรือเป็นประเภทส่วนลด");
+    statements.push(db.prepare(`UPDATE Items SET ItemTypeID = ? WHERE ItemTypeID = ?
+      AND EXISTS (SELECT 1 FROM ItemType WHERE ID = ? AND Name1 <> ?)
+      AND EXISTS (SELECT 1 FROM ItemType WHERE ID = ? AND Name1 <> ?)`)
+      .bind(targetID, id, targetID, DISCOUNT_TYPE_NAME, id, DISCOUNT_TYPE_NAME));
+  }
+  // Move and delete together; never leave products orphaned or alter stock/history.
+  statements.push(db.prepare(`DELETE FROM ItemType WHERE ID = ? AND Name1 <> ?
+    AND NOT EXISTS (SELECT 1 FROM Items WHERE ItemTypeID = ?)`)
+    .bind(id, DISCOUNT_TYPE_NAME, id));
+  const results = await db.batch(statements);
+  if (!results[results.length - 1].meta.changes) return bad(c, "ประเภทนี้ยังมีสินค้า กรุณาเลือกประเภทปลายทางหรือโหลดข้อมูลใหม่", 409);
+  return c.json({ ok: true, moved: targetID === undefined ? 0 : results[0].meta.changes });
 });
 
 app.get("/api/items", async (c) => {

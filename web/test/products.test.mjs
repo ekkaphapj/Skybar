@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+const BASE=process.env.BASE_URL||'http://127.0.0.1:8796';
+assert.ok(['localhost','127.0.0.1'].includes(new URL(BASE).hostname),'Only isolated local database');
+function client(){return{cookie:'',async req(method,path,body){const r=await fetch(BASE+path,{method,headers:{'Content-Type':'application/json',Cookie:this.cookie},body:body===undefined?undefined:JSON.stringify(body)});if(r.headers.has('set-cookie'))this.cookie=r.headers.get('set-cookie').split(';')[0];return{status:r.status,data:await r.json()};}};}
+const admin=client(),staff=client(),anonymous=client();let passed=0,userID;
+function check(label,value){assert.ok(value,label);passed++;console.log('  ok    '+label);}
+check('admin login',(await admin.req('POST','/api/login',{username:'admin',password:'1234'})).status===200);
+const backup=(await admin.req('GET','/api/export')).data;
+try{
+ const username='types_'+Date.now();userID=(await admin.req('POST','/api/users',{username,displayName:'พนักงานประเภท',password:'5678'})).data.id;
+ await staff.req('POST','/api/login',{username,password:'5678'});
+ const types=()=>admin.req('GET','/api/item-types');
+ const makeType=async name=>{const r=await admin.req('POST','/api/item-types',{name});assert.equal(r.status,200);return r.data.id;};
+ const source=await makeType('หมวด <ทดสอบ>'),target=await makeType('ปลายทาง'),empty=await makeType('ประเภทว่าง');
+ const discount=(await types()).data.find(t=>t.Name1==='ส่วนลด').ID;
+ check('staff can read categories',(await staff.req('GET','/api/item-types')).status===200);
+ check('anonymous cannot edit',(await anonymous.req('PUT','/api/item-types/'+source,{name:'forged'})).status===401);
+ for(const [method,path,body]of[['POST','/api/item-types',{name:'forged'}],['PUT','/api/item-types/'+source,{name:'forged'}],['DELETE','/api/item-types/'+source,{targetTypeId:target}]])check('staff cannot '+method+' category',(await staff.req(method,path,body)).status===403);
+ for(const name of['','  ',null,3,'x'.repeat(101)])check('invalid name rejected: '+JSON.stringify(name),(await admin.req('PUT','/api/item-types/'+source,{name})).status===400);
+ check('duplicate category creation rejected',(await admin.req('POST','/api/item-types',{name:'ปลายทาง'})).status===400);
+ check('rename duplicate rejected',(await admin.req('PUT','/api/item-types/'+source,{name:'ปลายทาง'})).status===409);
+ check('discount cannot be renamed',(await admin.req('PUT','/api/item-types/'+discount,{name:'other'})).status===400);
+ check('discount cannot be deleted',(await admin.req('DELETE','/api/item-types/'+discount)).status===400);
+ check('normal category cannot become discount',(await admin.req('PUT','/api/item-types/'+source,{name:'ส่วนลด'})).status===400);
+ const item=(await admin.req('POST','/api/items',{name:'สินค้าประเภท',itemTypeId:source,price:12.5,amount:7})).data.id;
+ const readItem=()=>admin.req('GET','/api/items/'+item);
+ check('category counts products',(await types()).data.find(t=>t.ID===source).itemCount===1);
+ check('rename category',(await admin.req('PUT','/api/item-types/'+source,{name:'  ชื่อใหม่ <หมวด>  '})).status===200);
+ check('renaming preserves association and stock',(await readItem()).data.TypeName==='ชื่อใหม่ <หมวด>'&&(await readItem()).data.Amount===7);
+ check('stock uses renamed category',(await staff.req('GET','/api/stock?typeName='+encodeURIComponent('ชื่อใหม่ <หมวด>'))).data.some(r=>r.itemCode===item));
+ check('cannot delete occupied category without a destination',(await admin.req('DELETE','/api/item-types/'+source)).status===409);
+ for(const targetTypeId of[source,discount,99999999,'1',null])check('invalid move destination rejected: '+JSON.stringify(targetTypeId),(await admin.req('DELETE','/api/item-types/'+source,{targetTypeId})).status===400);
+ check('rejected delete preserves product',(await readItem()).data.TypeName==='ชื่อใหม่ <หมวด>');
+ const before=(await admin.req('GET','/api/export')).data;
+ const removed=await admin.req('DELETE','/api/item-types/'+source,{targetTypeId:target});
+ check('move and delete succeeds',removed.status===200&&removed.data.moved===1);
+ check('source removed and target count updated',!(await types()).data.some(t=>t.ID===source)&&(await types()).data.find(t=>t.ID===target).itemCount===1);
+ const moved=(await readItem()).data;
+ check('move preserves product ID price and balance',moved.ID===item&&moved.Price===12.5&&moved.Amount===7&&moved.TypeName==='ปลายทาง');
+ const after=(await admin.req('GET','/api/export')).data;
+ for(const table of['Stock','Sell','StockTransaction','Account','CASH'])assert.deepEqual(after.tables[table],before.tables[table],table+' preserved');
+ check('stock and transaction history remain intact',true);
+ check('empty category deleted',(await admin.req('DELETE','/api/item-types/'+empty)).status===200);
+ check('repeated delete rejected',(await admin.req('DELETE','/api/item-types/'+empty)).status===404);
+ check('missing category cannot be renamed',(await admin.req('PUT','/api/item-types/99999999',{name:'missing'})).status===404);
+ check('invalid category ID rejected',(await admin.req('DELETE','/api/item-types/bad')).status===400);
+ const concurrent=await makeType('ลบพร้อมกัน');
+ const deletes=await Promise.all([admin.req('DELETE','/api/item-types/'+concurrent),admin.req('DELETE','/api/item-types/'+concurrent)]);
+ check('concurrent delete has one winner',deletes.filter(r=>r.status===200).length===1&&deletes.every(r=>[200,404,409].includes(r.status)));
+}finally{assert.equal((await admin.req('POST','/api/import',backup)).status,200,'Restore business fixture');if(userID)await admin.req('PUT','/api/users/'+userID,{active:false});}
+console.log('\n'+passed+' category management checks passed');

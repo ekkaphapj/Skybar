@@ -79,7 +79,7 @@ async function loadItemTypes() {
 }
 
 /* ---------------- router ---------------- */
-const views = ["login", "main", "sell", "stock", "cash", "additem", "report", "receipt", "voucher", "history", "users"];
+const views = ["login", "main", "sell", "stock", "cash", "additem", "report", "receipt", "voucher", "history", "users", "products"];
 function navigate(name) { location.hash = "#/" + name; }
 let currentView = "";
 async function route() {
@@ -91,7 +91,7 @@ async function route() {
     catch (e) { toastErr(e.message); navigate("sell"); return; }
   }
   if (name !== "login" && !currentUser) { navigate("login"); return; }
-  if (["users", "additem"].includes(name) && currentUser?.role !== "admin") { navigate("main"); return; }
+  if (["users", "additem", "products"].includes(name) && currentUser?.role !== "admin") { navigate("main"); return; }
   const authRequired = META.required;
   if (authRequired && name !== "login" && !sessionStorage.getItem("authed")) {
     // still allow views to attempt load; api() will bounce to login on 401
@@ -112,6 +112,7 @@ async function route() {
   if (name === "stock") await initStock();
   if (name === "cash") initCash();
   if (name === "additem") initAddItem();
+  if (name === "products") await initProducts();
   if (name === "report") initReport();
   if (name === "receipt") initReceiptView();
   if (name === "voucher") initVoucher();
@@ -777,6 +778,74 @@ async function saveItem() {
 }
 
 
+/* ---------------- product categories ---------------- */
+let productsRequest = 0;
+async function initProducts() {
+  const selectedType = $("products-type").value;
+  await loadItemTypes();
+  $("products-type").innerHTML = '<option value="">ทุกประเภท</option>' + itemTypes.map(t => `<option value="${esc(t.Name1)}">${esc(t.Name1)}</option>`).join("");
+  if (itemTypes.some(t => t.Name1 === selectedType)) $("products-type").value = selectedType;
+  $("item-type-table").querySelector("tbody").innerHTML = itemTypes.map(t => `<tr>
+    <td data-label="ประเภทสินค้า">${esc(t.Name1)}</td><td data-label="จำนวนสินค้า">${num(t.itemCount)}</td>
+    <td data-label="จัดการ">${t.Name1 === "ส่วนลด" ? '<span class="hint">ประเภทพิเศษของระบบ</span>' : `<div class="row"><button class="btn" data-edit-item-type="${t.ID}">แก้ไข</button><button class="btn danger" data-delete-item-type="${t.ID}">ลบประเภท</button></div>`}</td></tr>`).join("");
+  await loadProductsTable();
+}
+async function loadProductsTable() {
+  const request = ++productsRequest;
+  const rows = await api("/api/items?typeName=" + encodeURIComponent($("products-type").value));
+  if (request !== productsRequest) return;
+  fillTable("products-table", rows, r => [r.ID, esc(r.Name1), esc(r.TypeName), r.TypeName === "ส่วนลด" ? num(r.Price) : fmt2(r.Price), num(r.Amount)]);
+  if (!rows.length) $("products-table").querySelector("tbody").innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีสินค้าในประเภทนี้</td></tr>';
+}
+function openItemTypeEditor(id = null) {
+  if (currentUser?.role !== "admin") return;
+  const type = id === null ? null : itemTypes.find(t => t.ID === Number(id));
+  if (id !== null && (!type || type.Name1 === "ส่วนลด")) return;
+  $("item-type-id").value = type?.ID || "";
+  $("item-type-name").value = type?.Name1 || "";
+  $("item-type-title").textContent = type ? "แก้ไขประเภทสินค้า" : "เพิ่มประเภทสินค้า";
+  $("item-type-error").textContent = "";
+  $("item-type-dialog").showModal();
+}
+async function saveItemType(event) {
+  event.preventDefault();
+  if (currentUser?.role !== "admin") return;
+  const button = $("btn-save-item-type"), id = $("item-type-id").value;
+  button.disabled = true;
+  try {
+    await api("/api/item-types" + (id ? "/" + id : ""), { method: id ? "PUT" : "POST", body: { name: $("item-type-name").value } });
+    $("item-type-dialog").close(); toast("บันทึกประเภทสินค้าแล้ว");
+    await initProducts();
+  } catch (e) { $("item-type-error").textContent = e.message; }
+  finally { button.disabled = false; }
+}
+function openDeleteItemType(id) {
+  if (currentUser?.role !== "admin") return;
+  const type = itemTypes.find(t => t.ID === Number(id));
+  if (!type || type.Name1 === "ส่วนลด") return;
+  const hasItems = Number(type.itemCount) > 0;
+  $("delete-item-type-id").value = type.ID;
+  $("delete-item-type-summary").textContent = `ยืนยันลบประเภท “${type.Name1}” มีสินค้า ${Number(type.itemCount)} รายการ`;
+  $("delete-item-type-target-field").classList.toggle("hidden", !hasItems);
+  $("delete-item-type-target").required = hasItems;
+  $("delete-item-type-target").innerHTML = '<option value="">เลือกประเภทปลายทาง</option>' + itemTypes.filter(t => t.ID !== type.ID && t.Name1 !== "ส่วนลด").map(t => `<option value="${t.ID}">${esc(t.Name1)}</option>`).join("");
+  $("delete-item-type-error").textContent = "";
+  $("btn-confirm-delete-item-type").textContent = hasItems ? "ย้ายสินค้าและลบประเภท" : "ยืนยันลบประเภท";
+  $("delete-item-type-dialog").showModal();
+}
+async function deleteItemType(event) {
+  event.preventDefault();
+  if (currentUser?.role !== "admin") return;
+  const button = $("btn-confirm-delete-item-type"), target = $("delete-item-type-target").value;
+  button.disabled = true;
+  try {
+    await api("/api/item-types/" + $("delete-item-type-id").value, { method: "DELETE", body: target ? { targetTypeId: Number(target) } : {} });
+    $("delete-item-type-dialog").close(); toast("ลบประเภทสินค้าแล้ว");
+    await initProducts();
+  } catch (e) { $("delete-item-type-error").textContent = e.message; }
+  finally { button.disabled = false; }
+}
+
 /* ---------------- report ---------------- */
 let reportIdentity = null;
 let dailyReportFiles = [];
@@ -1027,6 +1096,10 @@ function wire() {
       queueOrderSave();
       return;
     }
+    const editType = e.target.closest("[data-edit-item-type]");
+    if (editType) { openItemTypeEditor(editType.dataset.editItemType); return; }
+    const deleteType = e.target.closest("[data-delete-item-type]");
+    if (deleteType) { openDeleteItemType(deleteType.dataset.deleteItemType); return; }
     const edit = e.target.closest("[data-edit-stock]");
     if (edit) { editStock(edit.dataset.editStock); return; }
     const historyItem = e.target.closest("[data-stock-history]");
@@ -1125,6 +1198,15 @@ function wire() {
     $("cash-after").textContent = v > 0 ? fmt2(cur - v) + " บาท" : "-";
   };
   $("btn-deposit").onclick = saveDeposit;
+
+  // product management
+  $("btn-add-item-type").onclick = () => openItemTypeEditor();
+  $("item-type-form").onsubmit = saveItemType;
+  $("btn-cancel-item-type").onclick = () => $("item-type-dialog").close();
+  $("delete-item-type-form").onsubmit = deleteItemType;
+  $("btn-cancel-delete-item-type").onclick = () => $("delete-item-type-dialog").close();
+  $("products-type").onchange = () => loadProductsTable().catch(e => toastErr(e.message));
+  $("btn-refresh-products").onclick = () => initProducts().catch(e => toastErr(e.message));
 
   // add item
   $("btn-save-item").onclick = saveItem;
