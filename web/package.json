@@ -22,7 +22,8 @@
     "test:restaurant": "node test/restaurant.test.mjs",
     "test:scene": "node test/scene.test.mjs",
     "test:dashboard": "node test/dashboard.test.mjs",
-    "test:login": "node test/login.test.mjs"
+    "test:login": "node test/login.test.mjs",
+    "test:stock": "node test/stock.test.mjs"
   },
   "dependencies": {
     "hono": "^4.6.14"

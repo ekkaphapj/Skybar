@@ -91,7 +91,7 @@ async function route() {
     catch (e) { toastErr(e.message); navigate("sell"); return; }
   }
   if (name !== "login" && !currentUser) { navigate("login"); return; }
-  if (name === "users" && currentUser?.role !== "admin") { navigate("main"); return; }
+  if (["users", "additem"].includes(name) && currentUser?.role !== "admin") { navigate("main"); return; }
   const authRequired = META.required;
   if (authRequired && name !== "login" && !sessionStorage.getItem("authed")) {
     // still allow views to attempt load; api() will bounce to login on 401
@@ -109,7 +109,7 @@ async function route() {
   try {
   if (name === "main") await initMain();
   if (name === "sell") await initSell();
-  if (name === "stock") initStock();
+  if (name === "stock") await initStock();
   if (name === "cash") initCash();
   if (name === "additem") initAddItem();
   if (name === "report") initReport();
@@ -611,20 +611,93 @@ function showReceipt(rc) {
 }
 
 /* ---------------- stock ---------------- */
+let stockRows = [];
+let stockHistoryBefore = null;
+let stockHistoryRequest = 0;
 async function initStock() {
   if ($("stock-type").options.length <= 1) await loadItemTypes();
   $("st-date").value = businessDate();
+  document.querySelectorAll("#st-action option[data-admin-only]").forEach(option => { option.disabled = currentUser?.role !== "admin"; });
+  if (currentUser?.role !== "admin") $("st-action").value = "income";
+  onStockActionChange();
+  $("stock-type").options[0].textContent = "ทุกหมวดหมู่";
+  $("stock-type").value = "";
+  const items = await api("/api/items");
+  $("stock-history-item").innerHTML = '<option value="">สินค้าทั้งหมด</option>' + items.map(i => `<option value="${i.ID}">${esc(i.TypeName)} · ${esc(i.Name1)} (${i.ID})</option>`).join("");
+  await showStockTab("balance");
+}
+async function showStockTab(name) {
+  for (const tab of ["balance", "transactions"]) {
+    const active = name === tab;
+    $("stock-tab-" + tab).setAttribute("aria-selected", String(active));
+    $("stock-tab-" + tab).tabIndex = active ? 0 : -1;
+    $("stock-tab-" + tab).classList.toggle("primary", active);
+    $("stock-panel-" + tab).classList.toggle("hidden", !active);
+  }
+  if (name === "balance") await loadStockTable();
+  else await loadStockHistory();
 }
 async function loadStockTable() {
-  if (!$("stock-type").value) { toastErr("เลือกประเภทสินค้า"); return; }
-  const rows = await api("/api/stock?typeName=" + encodeURIComponent($("stock-type").value));
-  $("stock-table").querySelector("tbody").innerHTML = rows
-    .map(
-      (r) => `<tr class="clickable" data-id="${r.itemCode}" data-name="${esc(r.name)}">
-        <td data-label="รหัส">${r.itemCode}</td><td data-label="สินค้า">${esc(r.name)}</td><td data-label="คงเหลือ" class="num">${r.amount}</td>
-        <td data-label="วันที่">${r.date || "-"}</td><td data-label="เวลา">${r.time || "-"}</td></tr>`
-    )
-    .join("");
+  stockRows = await api("/api/stock?typeName=" + encodeURIComponent($("stock-type").value));
+  let category = null;
+  $("stock-table").querySelector("tbody").innerHTML = stockRows.map(r => {
+    const heading = category !== r.typeName ? `<tr class="stock-category"><th colspan="6">${esc(r.typeName)}</th></tr>` : "";
+    category = r.typeName;
+    return heading + `<tr data-id="${r.itemCode}">
+      <td data-label="รหัส">${r.itemCode}</td><td data-label="สินค้า">${esc(r.name)}</td><td data-label="คงเหลือ" class="num">${num(r.amount)}</td>
+      <td data-label="วันที่">${esc(r.date || "-")}</td><td data-label="เวลา">${esc(r.time || "-")}</td>
+      <td data-label="จัดการ"><div class="row">${currentUser?.role === "admin" ? `<button class="btn" data-edit-stock="${r.itemCode}">แก้ไข</button>` : ""}<button class="btn" data-stock-history="${r.itemCode}">ประวัติ</button></div></td></tr>`;
+  }).join("") || '<tr><td colspan="6">ไม่มีสินค้าในหมวดหมู่นี้</td></tr>';
+}
+function editStock(itemID) {
+  if (currentUser?.role !== "admin") return;
+  const row = stockRows.find(r => r.itemCode === Number(itemID));
+  if (!row) return;
+  $("stock-edit-id").value = row.itemCode;
+  $("stock-edit-expected").value = row.amount;
+  $("stock-edit-name").textContent = row.name;
+  $("stock-edit-amount").value = row.amount;
+  $("stock-edit-error").textContent = "";
+  $("stock-edit-dialog").showModal();
+}
+async function saveStockBalance(event) {
+  event.preventDefault();
+  if (currentUser?.role !== "admin") return;
+  const input = $("stock-edit-amount"), button = $("btn-save-stock-balance");
+  if (!input.value.trim() || !Number.isSafeInteger(Number(input.value))) { $("stock-edit-error").textContent = "จำนวนสต็อกต้องเป็นจำนวนเต็ม"; return; }
+  button.disabled = true;
+  try {
+    await api("/api/stock/" + $("stock-edit-id").value, { method: "PUT", body: { amount: Number(input.value), expectedAmount: Number($("stock-edit-expected").value) } });
+    $("stock-edit-dialog").close();
+    toast("บันทึกยอดสต็อกเรียบร้อย");
+    await loadStockTable();
+  } catch (e) { $("stock-edit-error").textContent = e.message; }
+  finally { button.disabled = false; }
+}
+async function loadStockHistory(more = false) {
+  if (more && !stockHistoryBefore) return;
+  const request = ++stockHistoryRequest;
+  const params = new URLSearchParams();
+  if ($("stock-history-item").value) params.set("itemID", $("stock-history-item").value);
+  if (more) params.set("before", stockHistoryBefore);
+  const tbody = $("stock-history-table").querySelector("tbody");
+  if (!more) { tbody.innerHTML = '<tr><td colspan="7">กำลังโหลด…</td></tr>'; stockHistoryBefore = null; $("btn-more-stock-history").classList.add("hidden"); }
+  $("btn-more-stock-history").disabled = true;
+  try {
+    const rows = await api("/api/stock/transactions?" + params);
+    if (request !== stockHistoryRequest) return;
+    const html = rows.map(r => `<tr><td data-label="วันที่">${esc(r.DateRecord || "-")}</td><td data-label="สินค้า">${esc(r.ItemName || r.ItemID || "-")}</td>
+      <td data-label="รายการ">${esc(r.TransactionType)}</td><td data-label="จำนวนเปลี่ยนแปลง">${Number(r.StockChange) > 0 ? "+" : ""}${num(r.StockChange)}</td>
+      <td data-label="ยอดเงิน">${fmt2(r.Price)}</td><td data-label="ผู้บันทึก">${esc(r.Owner || "-")}</td>
+      <td data-label="หมายเหตุ / บิล">${esc(r.Comment || "-")}${r.BillID ? " · บิล " + esc(r.BillID) : ""}</td></tr>`).join("");
+    if (more) tbody.insertAdjacentHTML("beforeend", html);
+    else tbody.innerHTML = html || '<tr><td colspan="7">ยังไม่มีรายการสต็อก</td></tr>';
+    stockHistoryBefore = rows.length === 100 ? rows[rows.length - 1].ID : null;
+    $("btn-more-stock-history").classList.toggle("hidden", !stockHistoryBefore);
+  } catch (e) {
+    if (request === stockHistoryRequest && !more) tbody.innerHTML = '<tr><td colspan="7">โหลดประวัติไม่สำเร็จ กรุณาลองใหม่</td></tr>';
+    throw e;
+  } finally { if (request === stockHistoryRequest) $("btn-more-stock-history").disabled = false; }
 }
 function onStockActionChange() {
   const a = $("st-action").value;
@@ -657,7 +730,7 @@ async function saveStockTx() {
     toast("บันทึกรายการเรียบร้อย");
     $("st-itemid").value = ""; $("st-itemname").value = ""; $("st-amount").value = "";
     $("st-price").value = ""; $("st-comment").value = "";
-    if ($("stock-type").value) loadStockTable();
+    await loadStockHistory();
   } catch (e) { toastErr(e.message); }
 }
 
@@ -954,10 +1027,12 @@ function wire() {
       queueOrderSave();
       return;
     }
-    const row = e.target.closest("#stock-table tr.clickable");
-    if (row) {
-      $("st-itemid").value = row.dataset.id;
-      $("st-itemname").value = row.dataset.name;
+    const edit = e.target.closest("[data-edit-stock]");
+    if (edit) { editStock(edit.dataset.editStock); return; }
+    const historyItem = e.target.closest("[data-stock-history]");
+    if (historyItem) {
+      $("stock-history-item").value = historyItem.dataset.stockHistory;
+      showStockTab("transactions").catch(e => toastErr(e.message));
       return;
     }
   });
@@ -1023,7 +1098,23 @@ function wire() {
   $("btn-close-receipt").onclick = () => $("receipt-overlay").classList.add("hidden");
 
   // stock
-  $("btn-load-stock").onclick = loadStockTable;
+  const stockTask = fn => () => fn().catch(e => toastErr(e.message));
+  $("btn-load-stock").onclick = stockTask(loadStockTable);
+  $("stock-type").onchange = stockTask(loadStockTable);
+  $("stock-tab-balance").onclick = stockTask(() => showStockTab("balance"));
+  $("stock-tab-transactions").onclick = stockTask(() => showStockTab("transactions"));
+  for (const name of ["balance", "transactions"]) $("stock-tab-" + name).onkeydown = event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const target = event.key === "Home" ? "balance" : event.key === "End" ? "transactions" : name === "balance" ? "transactions" : "balance";
+    $("stock-tab-" + target).focus();
+    showStockTab(target).catch(e => toastErr(e.message));
+  };
+  $("stock-history-item").onchange = stockTask(() => loadStockHistory());
+  $("btn-load-stock-history").onclick = stockTask(() => loadStockHistory());
+  $("btn-more-stock-history").onclick = stockTask(() => loadStockHistory(true));
+  $("stock-edit-form").onsubmit = saveStockBalance;
+  $("btn-cancel-stock-edit").onclick = () => $("stock-edit-dialog").close();
   $("st-action").onchange = onStockActionChange;
   $("btn-save-stock").onclick = saveStockTx;
 

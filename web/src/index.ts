@@ -126,6 +126,7 @@ app.get("/api/items/:id", async (c) => {
 });
 
 app.post("/api/items", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
   const b = await c.req.json().catch(() => ({}));
   const name = String(b.name ?? "").trim();
   const itemTypeId = Number(b.itemTypeId);
@@ -173,7 +174,7 @@ app.post("/api/items", async (c) => {
 
 app.get("/api/stock", async (c) => {
   const typeName = c.req.query("typeName");
-  let sql = `SELECT i.ID AS itemCode, i.Name1 AS name, IFNULL(s.Amount,0) AS amount, s.Date1 AS date, s.Time1 AS time
+  let sql = `SELECT i.ID AS itemCode, i.Name1 AS name, t.Name1 AS typeName, IFNULL(s.Amount,0) AS amount, s.Date1 AS date, s.Time1 AS time
              FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID`;
   const binds: unknown[] = [];
   if (typeName) {
@@ -186,10 +187,46 @@ app.get("/api/stock", async (c) => {
 });
 
 app.get("/api/stock/transactions", async (c) => {
+  const itemID = c.req.query("itemID"), before = c.req.query("before");
+  if (itemID && (!Number.isSafeInteger(Number(itemID)) || Number(itemID) <= 0)) return bad(c, "รหัสสินค้าไม่ถูกต้อง");
+  if (before && (!Number.isSafeInteger(Number(before)) || Number(before) <= 0)) return bad(c, "รหัสรายการไม่ถูกต้อง");
+  const filters: string[] = [], binds: number[] = [];
+  if (itemID) { filters.push("st.ItemID = ?"); binds.push(Number(itemID)); }
+  if (before) { filters.push("st.ID < ?"); binds.push(Number(before)); }
   const { results } = await c.env.DB.prepare(
-    "SELECT * FROM StockTransaction ORDER BY ID DESC LIMIT 100"
-  ).all();
+    `SELECT st.*, CASE WHEN st.TransactionType = 'ขาย' THEN -st.Amount ELSE st.Amount END AS StockChange,
+     i.Name1 AS ItemName, t.Name1 AS TypeName FROM StockTransaction st
+     LEFT JOIN Items i ON i.ID = st.ItemID LEFT JOIN ItemType t ON t.ID = i.ItemTypeID
+     ${filters.length ? "WHERE " + filters.join(" AND ") : ""} ORDER BY st.ID DESC LIMIT 100`
+  ).bind(...binds).all();
   return c.json(results);
+});
+
+app.put("/api/stock/:itemID", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const itemID = Number(c.req.param("itemID"));
+  const b = await c.req.json().catch(() => ({}));
+  const amount = b.amount, expected = b.expectedAmount;
+  if (!Number.isSafeInteger(itemID) || itemID <= 0 || !Number.isSafeInteger(amount) || !Number.isSafeInteger(expected) || !Number.isSafeInteger(amount - expected)) return bad(c, "จำนวนสต็อกต้องเป็นจำนวนเต็ม");
+  const db = c.env.DB, today = businessDate(), time = nowTime(), owner = c.get("user").displayName;
+  const item = await db.prepare("SELECT i.ID, IFNULL(s.Amount, 0) AS amount FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID WHERE i.ID = ?").bind(itemID).first<{ ID: number; amount: number }>();
+  if (!item) return bad(c, "ไม่พบรหัสสินค้านี้", 404);
+  if (item.amount !== expected) return bad(c, "สต็อกเปลี่ยนแปลงแล้ว กรุณาโหลดข้อมูลใหม่", 409);
+  if (amount === expected) return c.json({ ok: true, changed: false });
+  // Both statements compare the displayed quantity inside one atomic batch.
+  // A concurrent sale or adjustment cannot be overwritten or create a false audit entry.
+  const [audit] = await db.batch([
+    db.prepare(`INSERT INTO StockTransaction (TransactionType, Amount, Price, DateRecord, Date2, ItemID, PaymentType, Owner, Comment)
+      SELECT ?, ?, 0, ?, ?, i.ID, 'none', ?, ? FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID
+      WHERE i.ID = ? AND IFNULL(s.Amount, 0) = ?`)
+      .bind(`แก้ไขโดย ${owner}`, amount - expected, today, today, owner, `คงเหลือ ${expected} → ${amount} (${time})`, itemID, expected),
+    db.prepare(`INSERT INTO Stock (ItemID, Amount, Date1, Time1)
+      SELECT i.ID, ?, ?, ? FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID WHERE i.ID = ? AND IFNULL(s.Amount, 0) = ?
+      ON CONFLICT(ItemID) DO UPDATE SET Amount = excluded.Amount, Date1 = excluded.Date1, Time1 = excluded.Time1 WHERE Stock.Amount = ?`)
+      .bind(amount, today, time, itemID, expected, expected),
+  ]);
+  if (!audit.meta.changes) return bad(c, "สต็อกเปลี่ยนแปลงแล้ว กรุณาโหลดข้อมูลใหม่", 409);
+  return c.json({ ok: true, changed: true });
 });
 
 /**
@@ -202,6 +239,7 @@ app.get("/api/stock/transactions", async (c) => {
 app.post("/api/stock/transaction", async (c) => {
   const b = await c.req.json().catch(() => ({}));
   const action = String(b.action ?? "");
+  if (["purchase", "loss"].includes(action) && c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
   const owner = c.get("user").displayName;
   const today = businessDate();
   const time = nowTime();

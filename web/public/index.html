@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#183e36">
 <title>The Cottage Sky Bar POS</title>
 <link rel="icon" type="image/png" href="/logo.png">
-<link rel="stylesheet" href="/style.css?v=31dc3846bf28">
+<link rel="stylesheet" href="/style.css?v=558a50118792">
 <link rel="stylesheet" href="/restaurant.css?v=1a822a086b83">
 </head>
 <body>
@@ -19,7 +19,7 @@
   <button class="nav-link" data-nav="stock">▤ <span>สต็อก / รายรับรายจ่าย</span></button>
   <button class="nav-link" data-nav="report">▥ <span>รายงาน</span></button>
   <span class="nav-label">จัดการร้าน</span>
-  <button class="nav-link" data-nav="additem">＋ <span>เพิ่มสินค้า</span></button>
+  <button class="nav-link" data-nav="additem" data-admin-only>＋ <span>เพิ่มสินค้า</span></button>
   <button class="nav-link" data-nav="receipt">⌕ <span>ค้นหาใบเสร็จ</span></button>
   <button class="nav-link" data-nav="voucher">◇ <span>Voucher</span></button>
   <button class="nav-link" data-nav="cash">฿ <span>ตัดจ่ายเงินสด</span></button>
@@ -130,7 +130,7 @@
       <button class="btn primary big open-sale-button" data-nav="sell">＋ เปิดการขาย</button>
       <button class="btn big" data-nav="history">🗂️ ประวัติการขาย</button>
       <button class="btn big" data-nav="stock">📦 สต็อก / รายรับรายจ่าย</button>
-      <button class="btn big" data-nav="additem">➕ เพิ่มสินค้า</button>
+      <button class="btn big" data-nav="additem" data-admin-only>➕ เพิ่มสินค้า</button>
       <button class="btn big" data-nav="report">📊 รายงาน</button>
       <button class="btn big" data-nav="receipt">🔍 ค้นหาใบเสร็จ</button>
       <button class="btn big" data-nav="voucher">🎟️ Voucher</button>
@@ -296,25 +296,43 @@
     <button class="btn back" data-nav="main">← กลับ</button>
     <div class="page-title">📦 สต็อกและรายรับรายจ่าย</div>
   </header>
+  <div class="stock-tabs" role="tablist" aria-label="สต็อกสินค้า">
+    <button class="btn primary" id="stock-tab-balance" role="tab" aria-selected="true" aria-controls="stock-panel-balance" tabindex="0">สินค้าคงเหลือ</button>
+    <button class="btn" id="stock-tab-transactions" role="tab" aria-selected="false" aria-controls="stock-panel-transactions" tabindex="-1">ประวัติรายการสต็อก</button>
+  </div>
+  <div id="stock-panel-balance" role="tabpanel" aria-labelledby="stock-tab-balance">
   <div class="card">
     <div class="row">
-      <label class="field grow"><span>ประเภทสินค้า</span><select id="stock-type"></select></label>
-      <button class="btn" id="btn-load-stock">แสดงสต็อก</button>
+      <label class="field grow"><span>หมวดหมู่สินค้า</span><select id="stock-type"></select></label>
+      <button class="btn" id="btn-load-stock">โหลดสต็อกใหม่</button>
     </div>
+    <p class="hint">ยอดคงเหลือปัจจุบันแยกตามหมวดหมู่ · ผู้ดูแลระบบแก้ไขจำนวนได้</p>
     <table class="tbl mobile-records" id="stock-table">
-      <thead><tr><th>รหัส</th><th>รายการ</th><th>จำนวน</th><th>วันที่</th><th>เวลา</th></tr></thead>
+      <thead><tr><th>รหัส</th><th>รายการ</th><th>คงเหลือ</th><th>วันที่</th><th>เวลา</th><th>จัดการ</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
+  </div>
+  <div id="stock-panel-transactions" class="hidden" role="tabpanel" aria-labelledby="stock-tab-transactions">
+    <div class="card">
+      <div class="row">
+        <label class="field grow"><span>สินค้า</span><select id="stock-history-item"><option value="">สินค้าทั้งหมด</option></select></label>
+        <button class="btn" id="btn-load-stock-history">โหลดประวัติใหม่</button>
+      </div>
+      <table class="tbl mobile-records" id="stock-history-table">
+        <thead><tr><th>วันที่</th><th>สินค้า</th><th>รายการ</th><th>จำนวนเปลี่ยนแปลง</th><th>ยอดเงิน</th><th>ผู้บันทึก</th><th>หมายเหตุ / บิล</th></tr></thead><tbody></tbody>
+      </table>
+      <button class="btn hidden" id="btn-more-stock-history">โหลดรายการก่อนหน้า</button>
+    </div>
   <div class="card">
     <h3>บันทึกรายการ</h3>
     <div class="row">
       <label class="field"><span>รายการ</span>
         <select id="st-action">
-          <option value="purchase">ซื้อเพิ่ม</option>
+          <option value="purchase" data-admin-only>ซื้อเพิ่ม</option>
           <option value="expense">รายจ่ายอื่นๆ</option>
           <option value="income">รายรับอื่นๆ</option>
-          <option value="loss">สูญหาย/ทิ้ง</option>
+          <option value="loss" data-admin-only>สูญหาย/ทิ้ง</option>
         </select>
       </label>
       <label class="field"><span>รหัสสินค้า</span><input id="st-itemid" inputmode="numeric"></label>
@@ -336,7 +354,19 @@
       <button class="btn big" data-nav="cash">💵 ตัดจ่ายเงินสด</button>
     </div>
   </div>
+  </div>
 </section>
+
+<dialog id="stock-edit-dialog" class="customer-dialog" aria-labelledby="stock-edit-title">
+  <form id="stock-edit-form" class="card">
+    <h3 id="stock-edit-title">แก้ไขสต็อก <span id="stock-edit-name"></span></h3>
+    <input type="hidden" id="stock-edit-id"><input type="hidden" id="stock-edit-expected">
+    <label class="field"><span>จำนวนคงเหลือใหม่</span><input type="number" step="1" required id="stock-edit-amount" inputmode="numeric"></label>
+    <p class="hint">ระบบบันทึกยอดก่อนและหลัง พร้อมชื่อผู้แก้ไขในประวัติสต็อก</p>
+    <p id="stock-edit-error" class="error" role="status"></p>
+    <div class="row"><button class="btn primary" id="btn-save-stock-balance" type="submit">บันทึก</button><button class="btn" id="btn-cancel-stock-edit" type="button">ยกเลิก</button></div>
+  </form>
+</dialog>
 
 <!-- ============ CASH DEPOSIT ============ -->
 <section id="view-cash" class="view hidden">
@@ -581,6 +611,6 @@
 <script src="/restaurant.js?v=9961ed57f61c"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=fe139e5e6cd0"></script>
-<script src="/app.js?v=ac219417d6d5"></script>
+<script src="/app.js?v=3356bf30a0b6"></script>
 </body>
 </html>
