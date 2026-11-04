@@ -44,6 +44,7 @@ const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8"
 vm.runInContext(readFileSync(new URL("../public/seat-plan.js", import.meta.url), "utf8"), context);
 vm.runInContext(readFileSync(new URL("../public/receipt.js", import.meta.url), "utf8"), context);
 vm.runInContext(readFileSync(new URL("../public/printing.js", import.meta.url), "utf8"), context);
+vm.runInContext(readFileSync(new URL("../public/accounts.js", import.meta.url), "utf8"), context);
 vm.runInContext(source.split("/* ---------------- boot ---------------- */")[0], context);
 let passed = 0;
 function check(label, expression, expected) {

@@ -257,6 +257,13 @@ html{scroll-behavior:smooth;scroll-padding-top:24px}body{max-width:none;margin:0
 @media(max-width:360px){.view{padding-left:12px;padding-right:12px}.view .card{padding:14px}.view .stat{padding:12px}.view .stat b{font-size:22px}.mobile-order-total{left:12px;right:12px}.mobile-order-total strong{font-size:17px}.checkout-print-actions{grid-template-columns:1fr}.mobile-records td:before{flex-basis:70px}.mobile-nav button{min-width:48px}}
 
 .stock-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+#ac-table .btn { white-space: nowrap; }
+@media (min-width: 701px) {
+  #ac-table { min-width: 1000px; }
+  #ac-table td:first-child, #ac-table td:nth-child(5) { white-space: nowrap; }
+  #ac-table td:nth-child(3) { min-width: 240px; }
+  #ac-table td:last-child { min-width: 150px; }
+}
 .stock-category th { background: var(--surface, #edf3ed); color: #183c2c; text-align: left; }
 @media (max-width: 700px) {
   #stock-table .stock-category { display: block; padding: 12px; background: #edf3ed; }

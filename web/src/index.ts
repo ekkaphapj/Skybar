@@ -11,8 +11,10 @@ import {
 } from "./logic";
 
 import { installAuth, type AppEnv as Env } from "./auth";
+import { installAccounts } from "./accounts";
 const app = new Hono<Env>();
 installAuth(app);
+installAccounts(app);
 
 /* ------------------------------ helpers ------------------------------ */
 
@@ -346,12 +348,12 @@ app.put("/api/stock/:itemID", async (c) => {
 app.post("/api/stock/transaction", async (c) => {
   const b = await c.req.json().catch(() => ({}));
   const action = String(b.action ?? "");
-  if (["purchase", "loss"].includes(action) && c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  if (action === "loss" && c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
   const owner = c.get("user").displayName;
   const today = businessDate();
   const time = nowTime();
-
-
+  if (b.date2 !== undefined && !isValidDate(b.date2)) return bad(c, "เลือกวันที่ไม่ถูกต้อง");
+  const entryDate = b.date2 || today;
   const db = c.env.DB;
   const stmts: D1PreparedStatement[] = [];
 
@@ -366,11 +368,11 @@ app.post("/api/stock/transaction", async (c) => {
     if (!isValidDate(date2)) date2 = today;
 
     if (!Number.isInteger(itemID) || itemID <= 0) return bad(c, "รหัสสินค้าไม่ถูกต้อง");
-    if (!Number.isInteger(amount) || amount <= 0) return bad(c, "จำนวนสินค้าไม่ถูกต้อง");
-    if (!Number.isFinite(price) || price < 0) return bad(c, "ราคาสินค้าไม่ถูกต้อง");
+    if (!Number.isSafeInteger(amount) || amount <= 0) return bad(c, "จำนวนสินค้าไม่ถูกต้อง");
+    if (!Number.isFinite(price) || price < 0 || price !== money(price)) return bad(c, "ราคาสินค้าไม่ถูกต้อง");
     if (!place) return bad(c, "ใส่สถานที่ด้วย");
     if (!PAYMENT_TYPES.slice(0, 3).includes(paymentType)) return bad(c, "เลือกวิธีชำระเงิน");
-    const item = await db.prepare("SELECT Name1 FROM Items WHERE ID = ?").bind(itemID).first();
+    const item = await db.prepare("SELECT i.Name1 FROM Items i JOIN ItemType t ON t.ID = i.ItemTypeID WHERE i.ID = ? AND t.Name1 <> ?").bind(itemID, DISCOUNT_TYPE_NAME).first();
     if (!item) return bad(c, "ไม่พบรหัสสินค้านี้");
 
     const list = `รายการซื้อของ ${item.Name1} จำนวน ${amount} ชิ้น`;
@@ -380,10 +382,11 @@ app.post("/api/stock/transaction", async (c) => {
          VALUES ('ซื้อเพิ่ม', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(amount, price, today, date2, place, itemID, paymentType, owner, comment),
       db.prepare(
-        `INSERT INTO Account (Date1, PaymentType, Amount, Type, BillID, StockTransactionID, List, Owner)
-         VALUES (?, ?, ?, 'รายจ่าย', '055', (SELECT MAX(ID) FROM StockTransaction), ?, ?)`
-      ).bind(date2, paymentType, price, list, owner),
-      db.prepare("UPDATE Stock SET Amount = Amount + ?, Date1 = ?, Time1 = ? WHERE ItemID = ?").bind(amount, today, time, itemID)
+        `INSERT INTO Account (Date1, PaymentType, Amount, Type, BillID, StockTransactionID, List, Owner, Note, Time1)
+         VALUES (?, ?, ?, 'รายจ่าย', '055', (SELECT MAX(ID) FROM StockTransaction), ?, ?, ?, ?)`
+      ).bind(date2, paymentType, price, list, owner, comment, time),
+      db.prepare(`INSERT INTO Stock (ItemID, Amount, Date1, Time1) VALUES (?, ?, ?, ?)
+        ON CONFLICT(ItemID) DO UPDATE SET Amount = Stock.Amount + excluded.Amount, Date1 = excluded.Date1, Time1 = excluded.Time1`).bind(itemID, amount, today, time)
     );
     if (paymentType === "เงินสด") {
       stmts.push(
@@ -405,14 +408,14 @@ app.post("/api/stock/transaction", async (c) => {
     stmts.push(
       db.prepare(
         `INSERT INTO Account (Date1, PaymentType, Amount, Type, List, Owner) VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(today, paymentType, price, isIncome ? "รายรับ" : "รายจ่าย", list, owner)
+      ).bind(entryDate, paymentType, price, isIncome ? "รายรับ" : "รายจ่าย", list, owner)
     );
     if (paymentType === "เงินสด") {
       stmts.push(
         db.prepare(
           `INSERT INTO CASH (Date1, Type1, List, Time1, Amount, AccountID, Owner)
            VALUES (?, ?, ?, ?, ?, (SELECT MAX(ID) FROM Account), ?)`
-        ).bind(today, isIncome ? "รายรับ" : "รายจ่าย", list, time, isIncome ? price : -price, owner)
+        ).bind(entryDate, isIncome ? "รายรับ" : "รายจ่าย", list, time, isIncome ? price : -price, owner)
       );
     }
   } else if (action === "loss") {
@@ -823,13 +826,21 @@ app.delete("/api/accounts/:id", async (c) => {
 });
 
 app.get("/api/report/today", (c) => report(c, true));
+app.get("/api/report/monthly", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const year = Number(c.req.query("year")), month = Number(c.req.query("month"));
+  if (!Number.isInteger(year) || year < 2000 || year > 9999 || !Number.isInteger(month) || month < 1 || month > 12) return bad(c, "เลือกปีและเดือนให้ถูกต้อง");
+  const from = `${year}-${String(month).padStart(2, '0')}-01`;
+  const to = `${year}-${String(month).padStart(2, '0')}-${new Date(Date.UTC(year, month, 0)).getUTCDate()}`;
+  return report(c, false, { from, to });
+});
 app.get("/api/report", (c) => report(c));
 
-async function report(c: Context<Env>, todayOnly = false) {
+async function report(c: Context<Env>, todayOnly = false, period?: { from: string; to: string }) {
   const today = businessDate();
   const isAdmin = c.get("user").role === "admin";
-  const from = todayOnly ? today : c.req.query("from");
-  const to = todayOnly ? today : c.req.query("to");
+  const from = period?.from ?? (todayOnly ? today : c.req.query("from"));
+  const to = period?.to ?? (todayOnly ? today : c.req.query("to"));
   if (!isValidDate(from) || !isValidDate(to)) return bad(c, "เลือกวันที่ไม่ถูกต้อง");
   if (from > to) return bad(c, "เลือกวันที่ไม่ถูกต้อง");
   if (!isAdmin && from !== to) return bad(c, "พนักงานดูรายงานได้ครั้งละ 1 วันเท่านั้น", 403);
@@ -921,6 +932,7 @@ async function report(c: Context<Env>, todayOnly = false) {
     },
     sellSums: { cash: money(sellSums.cash), transfer: money(sellSums.transfer) },
     totalIncome,
+    balance: money(totalIncome - sums.cost),
     ...(isAdmin ? { profit: money(sums.monthlySell - sums.monthlyCost) } : {}),
     voucher: { issued: Number(voucherIssued?.n ?? 0), used: Number(voucherUsed?.n ?? 0) },
   });

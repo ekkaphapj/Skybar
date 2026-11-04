@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#183e36">
 <title>The Cottage Sky Bar POS</title>
 <link rel="icon" type="image/png" href="/logo.png">
-<link rel="stylesheet" href="/style.css?v=558a50118792">
+<link rel="stylesheet" href="/style.css?v=c65a247ac8d3">
 <link rel="stylesheet" href="/restaurant.css?v=1a822a086b83">
 </head>
 <body>
@@ -16,14 +16,13 @@
   <button class="nav-link" data-nav="main">▦ <span>ภาพรวม / โต๊ะ</span></button>
   <button class="nav-link" data-open-sale>＋ <span>เปิดการขาย</span></button>
   <button class="nav-link" data-nav="history">◷ <span>ประวัติการขาย</span></button>
-  <button class="nav-link" data-nav="stock">▤ <span>สต็อก / รายรับรายจ่าย</span></button>
-  <button class="nav-link" data-nav="report">▥ <span>รายงาน</span></button>
-  <span class="nav-label">จัดการร้าน</span>
-  <button class="nav-link" data-nav="products" data-admin-only>▦ <span>จัดการสินค้า</span></button>
-  <button class="nav-link" data-nav="additem" data-admin-only>＋ <span>เพิ่มสินค้า</span></button>
   <button class="nav-link" data-nav="receipt">⌕ <span>ค้นหาใบเสร็จ</span></button>
+  <button class="nav-link" data-nav="report">▥ <span>รายงาน</span></button>
+  <button class="nav-link" data-nav="accounts">฿ <span>รายรับ/รายจ่าย</span></button>
+  <button class="nav-link" data-nav="cash">฿ <span>ตัดเงินสด</span></button>
+  <button class="nav-link" data-nav="products" data-admin-only>▦ <span>จัดการประเภทสินค้า</span></button>
+  <button class="nav-link" data-nav="stock">▤ <span>Stock ของ</span></button>
   <button class="nav-link" data-nav="voucher">◇ <span>Voucher</span></button>
-  <button class="nav-link" data-nav="cash">฿ <span>ตัดจ่ายเงินสด</span></button>
   <button class="nav-link" data-printer-settings>⚙ <span>ตั้งค่าการพิมพ์</span></button>
   <button class="nav-link hidden" data-nav="users" data-admin-only>♙ <span>จัดการพนักงาน</span></button>
   <div class="current-user" id="sidebar-user"></div>
@@ -130,8 +129,9 @@
     <div class="menu-grid">
       <button class="btn primary big open-sale-button" data-nav="sell">＋ เปิดการขาย</button>
       <button class="btn big" data-nav="history">🗂️ ประวัติการขาย</button>
-      <button class="btn big" data-nav="stock">📦 สต็อก / รายรับรายจ่าย</button>
-      <button class="btn big" data-nav="products" data-admin-only>▦ จัดการสินค้า</button>
+      <button class="btn big" data-nav="accounts">฿ รายรับ/รายจ่าย</button>
+      <button class="btn big" data-nav="stock">📦 Stock ของ</button>
+      <button class="btn big" data-nav="products" data-admin-only>▦ จัดการประเภทสินค้า</button>
       <button class="btn big" data-nav="additem" data-admin-only>➕ เพิ่มสินค้า</button>
       <button class="btn big" data-nav="report">📊 รายงาน</button>
       <button class="btn big" data-nav="receipt">🔍 ค้นหาใบเสร็จ</button>
@@ -296,7 +296,7 @@
 <section id="view-stock" class="view hidden">
   <header class="page-header">
     <button class="btn back" data-nav="main">← กลับ</button>
-    <div class="page-title">📦 สต็อกและรายรับรายจ่าย</div>
+    <div class="page-title">📦 Stock ของ</div>
   </header>
   <div class="stock-tabs" role="tablist" aria-label="สต็อกสินค้า">
     <button class="btn primary" id="stock-tab-balance" role="tab" aria-selected="true" aria-controls="stock-panel-balance" tabindex="0">สินค้าคงเหลือ</button>
@@ -419,7 +419,7 @@
 <section id="view-products" class="view hidden">
   <header class="page-header">
     <button class="btn back" data-nav="main">← กลับ</button>
-    <div class="page-title">▦ จัดการสินค้า</div>
+    <div class="page-title">▦ จัดการประเภทสินค้า</div>
     <button class="btn primary" data-nav="additem">＋ เพิ่มสินค้า</button>
   </header>
   <div class="card">
@@ -500,6 +500,12 @@
       <button class="btn report-image-button" id="btn-report-image">สร้างรายงานวันนี้</button>
     </div>
   </div>
+  <div class="card" data-admin-only><h3>รายงานประจำเดือน</h3><div class="row">
+    <label class="field"><span>ปี พ.ศ.</span><select id="rp-year"></select></label>
+    <label class="field"><span>เดือน</span><select id="rp-month"></select></label>
+    <button class="btn primary" id="btn-report-monthly">สร้างรายงานประจำเดือน</button>
+    <button class="btn" id="btn-report-monthly-download" disabled>ดาวน์โหลดรายงาน CSV</button>
+  </div></div>
   <p class="hint" id="report-access-note"></p>
   <div id="report-body" class="hidden">
     <div class="card">
@@ -508,7 +514,7 @@
         <div class="stat"><span>รายรับทั้งหมด</span><b id="rp-account-income">-</b></div>
         <div class="stat"><span>ยอดขายสินค้า</span><b id="rp-total-income">-</b></div>
         <div class="stat"><span>รายจ่ายทั้งหมด</span><b id="rp-total-cost">-</b></div>
-        <div class="stat" data-admin-only><span>กำไรเดือนนี้ (รายรับ-รายจ่าย)</span><b id="rp-profit">-</b></div>
+        <div class="stat" data-admin-only><span>คงเหลือ (ยอดขาย−รายจ่าย)</span><b id="rp-profit">-</b></div>
         <div class="stat"><span>จำนวนสินค้าที่ขาย</span><b id="rp-quantity">-</b></div>
         <div class="stat"><span>เงินสดคงเหลือ (รวมยอดยกมา)</span><b id="rp-cash-cum">-</b></div>
       </div>
@@ -532,6 +538,39 @@
     <details class="card report-section"><summary>สต็อกคงเหลือ<span>แตะเพื่อดูรายการ</span></summary>
       <table class="tbl mobile-records" id="rp-stock-table"><thead><tr><th>ชื่อสินค้า</th><th>จำนวน</th></tr></thead><tbody></tbody></table></details>
   </div>
+</section>
+
+<section id="view-accounts" class="view hidden">
+  <header class="page-header"><button class="btn back" data-nav="main">← กลับ</button><div class="page-title">รายรับ/รายจ่าย</div></header>
+  <div class="card"><div class="row">
+    <label class="field"><span>จากวันที่</span><input type="date" id="ac-from"></label>
+    <label class="field"><span>ถึงวันที่</span><input type="date" id="ac-to"></label>
+    <button class="btn primary" id="ac-search">ดูรายการ</button><button class="btn" id="ac-today">วันนี้</button>
+  </div><p id="ac-summary" role="status"></p>
+  <p class="hint">บิลที่ปิดการขายจะลงรายการอัตโนมัติ · การแลกเงินสดไม่รวมเป็นรายรับหรือรายจ่าย</p>
+  <table class="tbl mobile-records" id="ac-table"><thead><tr><th>วันที่</th><th>ประเภท</th><th>รายการ</th><th>จำนวนสินค้า</th><th>ยอดเงิน</th><th>ช่องทาง</th><th>ผู้บันทึก</th><th>จัดการ</th></tr></thead><tbody></tbody></table></div>
+  <form class="card" id="ac-form"><h3 id="ac-form-title">บันทึกรายการ</h3>
+    <div class="row">
+      <label class="field"><span>ประเภท</span><select id="ac-type"><option>รายจ่าย</option><option>รายรับ</option><option>แลกเงินสด</option></select></label>
+      <label class="field" id="ac-category-field"><span>ประเภทรายจ่าย</span><select id="ac-category"><option value="other">อื่นๆ</option><option value="purchase">ซื้อของเข้าร้าน</option></select></label>
+      <label class="field hidden" id="ac-direction-field"><span>แลกเงินสด</span><select id="ac-direction"><option>รับเงินสด</option><option>จ่ายเงินสด</option></select></label>
+      <label class="field"><span>วันที่</span><input type="date" id="ac-date" required></label>
+    </div>
+    <div id="ac-purchase" class="hidden"><div class="row">
+      <label class="field"><span>ประเภทหลัก</span><select id="ac-main-type"></select></label>
+      <label class="field"><span>ประเภทย่อย</span><select id="ac-subtype"></select></label>
+      <label class="field grow"><span>สินค้า</span><select id="ac-item"></select></label>
+      <label class="field"><span>จำนวนที่ซื้อ</span><input type="number" min="1" step="1" id="ac-qty" value="1"></label>
+      <label class="field"><span>ซื้อจาก</span><input id="ac-place" maxlength="200"></label>
+    </div><p class="hint">ราคาที่กรอกคือยอดรวมทั้งรายการ เมื่อบันทึกระบบเพิ่มสต็อกอัตโนมัติ</p></div>
+    <div class="row">
+      <label class="field grow"><span>รายการ / หมายเหตุ</span><input id="ac-list" required maxlength="500"></label>
+      <label class="field"><span>ยอดเงินรวม (บาท)</span><input type="number" min="0.01" step="0.01" id="ac-amount" required></label>
+      <label class="field"><span>ช่องทาง</span><select id="ac-payment"><option>เงินสด</option><option>โอน</option><option>อื่นๆ</option><option value="Voucher" hidden>Voucher</option></select></label>
+    </div>
+    <p class="hint" id="ac-edit-note"></p><p class="error" id="ac-error" role="alert"></p>
+    <div class="row"><button class="btn primary" id="ac-save" type="submit">บันทึก</button><button class="btn hidden" type="button" id="ac-cancel">ยกเลิกการแก้ไข</button></div>
+  </form>
 </section>
 
 <!-- ============ RECEIPT LOOKUP ============ -->
@@ -684,6 +723,7 @@
 <script src="/restaurant.js?v=9961ed57f61c"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=fe139e5e6cd0"></script>
-<script src="/app.js?v=5d11cf5cf3f4"></script>
+<script src="/accounts.js?v=5063ec5a2de4"></script>
+<script src="/app.js?v=add557054fd7"></script>
 </body>
 </html>

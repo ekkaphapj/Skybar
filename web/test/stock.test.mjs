@@ -25,7 +25,7 @@ try {
   const stock = (await staff.req('GET', '/api/stock')).data;
   check('staff sees all categories and balances', stock.some(r => r.itemCode === itemID && r.amount === 20 && r.typeName === types[0].Name1) && stock.some(r => r.itemCode === otherID && r.typeName === types[1].Name1));
   check('category filter', (await staff.req('GET', '/api/stock?typeName=' + encodeURIComponent(types[1].Name1))).data.every(r => r.typeName === types[1].Name1));
-  for (const action of ['purchase', 'loss']) check('staff cannot ' + action, (await staff.req('POST', '/api/stock/transaction', { action, itemID, amount: 2, price: 10, paymentType: 'เงินสด', place: 'ตลาด' })).status === 403);
+  for (const action of ['loss']) check('staff cannot ' + action, (await staff.req('POST', '/api/stock/transaction', { action, itemID, amount: 2, price: 10, paymentType: 'เงินสด', place: 'ตลาด' })).status === 403);
   check('staff cannot adjust', (await staff.req('PUT', '/api/stock/' + itemID, { amount: 50, expectedAmount: 20 })).status === 403);
   check('staff cannot create initial stock', (await staff.req('POST', '/api/items', { name: 'blocked', itemTypeId: types[0].ID, amount: 50, price: 1 })).status === 403);
   check('denied writes do not change stock or history', (await balance()).data.Amount === 20 && (await history()).length === 0);

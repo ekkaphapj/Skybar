@@ -24,6 +24,7 @@
     "test:dashboard": "node test/dashboard.test.mjs",
     "test:login": "node test/login.test.mjs",
     "test:stock": "node test/stock.test.mjs",
+    "test:accounts": "node test/accounts.test.mjs",
     "test:products": "node test/products.test.mjs",
     "test:subtypes": "node test/subtypes.test.mjs"
   },

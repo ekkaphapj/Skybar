@@ -79,7 +79,7 @@ async function loadItemTypes() {
 }
 
 /* ---------------- router ---------------- */
-const views = ["login", "main", "sell", "stock", "cash", "additem", "report", "receipt", "voucher", "history", "users", "products"];
+const views = ["login", "main", "sell", "stock", "cash", "additem", "report", "receipt", "voucher", "history", "users", "products", "accounts"];
 function navigate(name) { location.hash = "#/" + name; }
 let currentView = "";
 async function route() {
@@ -110,6 +110,7 @@ async function route() {
   if (name === "main") await initMain();
   if (name === "sell") await initSell();
   if (name === "stock") await initStock();
+  if (name === "accounts") await Ledger.init();
   if (name === "cash") initCash();
   if (name === "additem") await initAddItem();
   if (name === "products") await initProducts();
@@ -940,6 +941,7 @@ function clearReportImages() {
   if ($("report-image-dialog").open) $("report-image-dialog").close();
 }
 function resetReport() {
+  Ledger.resetMonthly();
   reportGeneration++; reportRequest++;
   reportIdentity = null;
   $("rp-from").value = ""; $("rp-to").value = "";
@@ -966,13 +968,16 @@ async function loadReport() {
   const from = currentUser?.role === "admin" ? $("rp-from").value : to;
   if (!from || !to || from > to) { toastErr("เลือกวันที่ไม่ถูกต้อง"); return; }
   const r = await api(`/api/report?from=${from}&to=${to}`);
+  renderReport(r, from, to, request);
+}
+function renderReport(r, from, to, request = reportRequest) {
   if (request !== reportRequest) return;
   $("rp-total-income").textContent = fmt2(r.totalIncome);
   $("rp-account-income").textContent = fmt2(r.totalAccountIncome);
   $("rp-quantity").textContent = r.totalQuantitySold + " ชิ้น";
   $("report-period").textContent = from === to ? "ประจำวันที่ " + from : "ตั้งแต่ " + from + " ถึง " + to;
   $("rp-total-cost").textContent = fmt2(r.sums.cost);
-  $("rp-profit").textContent = r.profit === undefined ? "-" : fmt2(r.profit);
+  $("rp-profit").textContent = fmt2(r.balance);
   $("rp-cash-cum").textContent = fmt2(r.totalCashCumulative);
   $("rp-cash-in").textContent = fmt2(r.sums.cashIn);
   $("rp-transfer-in").textContent = fmt2(r.sums.transferIn);
@@ -1149,6 +1154,7 @@ async function importData(file) {
 
 /* ---------------- wire events ---------------- */
 function wire() {
+  Ledger.wire();
   RestaurantView.wire();
   document.querySelectorAll(".tbl").forEach((table) => {
     if (table.id === "sell-cart" || table.closest(".table-scroll")) return;
@@ -1307,7 +1313,7 @@ function wire() {
   $("btn-clear-item").onclick = () => { $("ai-name").value = ""; $("ai-id").value = ""; $("ai-price").value = ""; $("ai-amount").value = "0"; };
 
   // report
-  $("btn-report").onclick = loadReport;
+  $("btn-report").onclick = () => loadReport().catch(e => toastErr(e.message));
   $("btn-report-today").onclick = () => { $("rp-from").value = businessDate(); $("rp-to").value = businessDate(); loadReport(); };
   $("btn-report-image").onclick = createTodayReport;
   $("btn-download-report-all").onclick = downloadDailyReport;
