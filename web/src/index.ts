@@ -150,59 +150,46 @@ app.delete("/api/item-types/:id", async (c) => {
   return c.json({ ok: true, moved: targetID === undefined ? 0 : results[0].meta.changes });
 });
 
+// A subtype is the sellable product itself: main category -> product, no third level.
 app.get("/api/item-subtypes", async (c) => {
   const typeID = c.req.query("typeID");
   if (typeID && (!Number.isSafeInteger(Number(typeID)) || Number(typeID) <= 0)) return bad(c, "รหัสประเภทสินค้าไม่ถูกต้อง");
-  const { results } = await c.env.DB.prepare(`SELECT st.ID, st.ItemTypeID, st.Name1, COUNT(i.ID) AS itemCount
-    FROM ItemSubtype st LEFT JOIN Items i ON i.ItemSubtypeID = st.ID AND i.DeletedAt IS NULL
-    ${typeID ? "WHERE st.ItemTypeID = ?" : ""} GROUP BY st.ID ORDER BY st.ItemTypeID, st.Name1`)
-    .bind(...(typeID ? [Number(typeID)] : [])).all();
+  const { results } = await c.env.DB.prepare(`SELECT i.ID, i.ItemTypeID, i.Name1, i.Price, IFNULL(s.Amount, 0) AS Amount
+    FROM Items i JOIN ItemType t ON t.ID = i.ItemTypeID LEFT JOIN Stock s ON s.ItemID = i.ID
+    WHERE i.DeletedAt IS NULL AND t.Name1 <> ? ${typeID ? "AND i.ItemTypeID = ?" : ""} ORDER BY i.Name1, i.ID`)
+    .bind(DISCOUNT_TYPE_NAME, ...(typeID ? [Number(typeID)] : [])).all();
   return c.json(results);
 });
 
 app.post("/api/item-subtypes", async (c) => {
   if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
-  const b = await c.req.json().catch(() => ({}));
-  if (!Number.isSafeInteger(b.itemTypeId) || b.itemTypeId <= 0 || typeof b.name !== "string" || !b.name.trim() || b.name.trim().length > 100) return bad(c, "เลือกประเภทหลักและใส่ชื่อประเภทย่อยไม่เกิน 100 ตัวอักษร");
-  try {
-    const r = await c.env.DB.prepare(`INSERT INTO ItemSubtype (ItemTypeID, Name1)
-      SELECT ID, ? FROM ItemType WHERE ID = ? AND Name1 <> ?`).bind(b.name.trim(), b.itemTypeId, DISCOUNT_TYPE_NAME).run();
-    if (!r.meta.changes) return bad(c, "ไม่พบประเภทหลัก หรือเป็นประเภทส่วนลด");
-    return c.json({ ok: true, id: r.meta.last_row_id });
-  } catch { return bad(c, "มีประเภทย่อยชื่อนี้ในประเภทหลักแล้ว", 409); }
+  const b = (await c.req.json().catch(() => ({}))) || {};
+  if (typeof b.name !== "string" || !b.name.trim() || b.name.trim().length > 100 ||
+      typeof b.price !== "number" || !Number.isFinite(b.price) || b.price < 0 || b.price !== money(b.price) ||
+      !Number.isSafeInteger(b.itemTypeId) || b.itemTypeId <= 0 || b.parentSubtypeId !== undefined || b.itemSubtypeId != null) return bad(c, "เลือกประเภทหลัก ใส่ชื่อและราคาประเภทย่อยให้ถูกต้อง");
+  const type = await c.env.DB.prepare("SELECT ID FROM ItemType WHERE ID = ? AND Name1 <> ?").bind(b.itemTypeId, DISCOUNT_TYPE_NAME).first();
+  if (!type) return bad(c, "ไม่พบประเภทหลัก หรือเป็นประเภทส่วนลด");
+  if (await c.env.DB.prepare("SELECT ID FROM Items WHERE ItemTypeID = ? AND Name1 = ? AND DeletedAt IS NULL").bind(b.itemTypeId, b.name.trim()).first()) return bad(c, "มีประเภทย่อยชื่อนี้ในประเภทหลักแล้ว", 409);
+  return createItem(c, { name: b.name, price: b.price, itemTypeId: b.itemTypeId, amount: 0 });
 });
 
 app.put("/api/item-subtypes/:id", async (c) => {
   if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
-  const id = Number(c.req.param("id")), b = await c.req.json().catch(() => ({}));
-  if (!Number.isSafeInteger(id) || id <= 0 || typeof b.name !== "string" || !b.name.trim() || b.name.trim().length > 100) return bad(c, "ใส่ชื่อประเภทย่อยไม่เกิน 100 ตัวอักษร");
-  try {
-    const r = await c.env.DB.prepare("UPDATE ItemSubtype SET Name1 = ? WHERE ID = ?").bind(b.name.trim(), id).run();
-    if (!r.meta.changes) return bad(c, "ไม่พบประเภทย่อย", 404);
-    return c.json({ ok: true });
-  } catch { return bad(c, "มีประเภทย่อยชื่อนี้ในประเภทหลักแล้ว", 409); }
-});
-
-app.delete("/api/item-subtypes/:id", async (c) => {
-  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
-  const id = Number(c.req.param("id"));
-  if (!Number.isSafeInteger(id) || id <= 0) return bad(c, "รหัสประเภทย่อยไม่ถูกต้อง");
-  // ON DELETE SET NULL keeps every product, its balance, and transaction history.
-  const r = await c.env.DB.prepare("DELETE FROM ItemSubtype WHERE ID = ?").bind(id).run();
-  if (!r.meta.changes) return bad(c, "ไม่พบประเภทย่อย", 404);
+  const id = Number(c.req.param("id")), b = (await c.req.json().catch(() => ({}))) || {};
+  if (!Number.isSafeInteger(id) || id <= 0 || typeof b.name !== "string" || !b.name.trim() || b.name.trim().length > 100 ||
+      typeof b.price !== "number" || !Number.isFinite(b.price) || b.price < 0 || b.price !== money(b.price) ||
+      b.parentSubtypeId !== undefined || b.itemSubtypeId != null) return bad(c, "ใส่ชื่อและราคาประเภทย่อยให้ถูกต้อง");
+  if (await c.env.DB.prepare(`SELECT i.ID FROM Items i JOIN Items current ON current.ItemTypeID = i.ItemTypeID
+    WHERE current.ID = ? AND i.ID <> ? AND i.Name1 = ? AND i.DeletedAt IS NULL`).bind(id, id, b.name.trim()).first()) return bad(c, "มีประเภทย่อยชื่อนี้ในประเภทหลักแล้ว", 409);
+  const result = await c.env.DB.prepare(`UPDATE Items SET Name1 = ?, Price = ? WHERE ID = ? AND DeletedAt IS NULL
+    AND ItemTypeID IN (SELECT ID FROM ItemType WHERE Name1 <> ?)`)
+    .bind(b.name.trim(), b.price, id, DISCOUNT_TYPE_NAME).run();
+  if (!result.meta.changes) return bad(c, "ไม่พบประเภทย่อย", 404);
   return c.json({ ok: true });
 });
 
-app.put("/api/items/:id/subtype", async (c) => {
-  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
-  const id = Number(c.req.param("id")), b = await c.req.json().catch(() => ({}));
-  if (!Number.isSafeInteger(id) || id <= 0 || (b.itemSubtypeId !== null && (!Number.isSafeInteger(b.itemSubtypeId) || b.itemSubtypeId <= 0))) return bad(c, "เลือกประเภทย่อยให้ถูกต้อง");
-  const result = await c.env.DB.prepare(`UPDATE Items SET ItemSubtypeID = ? WHERE ID = ? AND DeletedAt IS NULL
-    AND (? IS NULL OR EXISTS (SELECT 1 FROM ItemSubtype WHERE ID = ? AND ItemTypeID = Items.ItemTypeID))`)
-    .bind(b.itemSubtypeId, id, b.itemSubtypeId, b.itemSubtypeId).run();
-  if (!result.meta.changes) return bad(c, "ไม่พบสินค้า หรือประเภทย่อยไม่อยู่ในประเภทหลักของสินค้า", 409);
-  return c.json({ ok: true });
-});
+app.delete("/api/item-subtypes/:id", (c) => deleteProduct(c));
+app.put("/api/items/:id/subtype", (c) => c.get("user").role !== "admin" ? bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403) : bad(c, "ระบบมีเพียงประเภทหลักและประเภทย่อย ไม่สามารถสร้างระดับที่สามได้"));
 
 app.get("/api/items", async (c) => {
   const typeName = c.req.query("typeName");
@@ -232,7 +219,8 @@ app.get("/api/items/:id", async (c) => {
   return c.json(row);
 });
 
-app.delete("/api/items/:id", async (c) => {
+app.delete("/api/items/:id", (c) => deleteProduct(c));
+async function deleteProduct(c: Context<Env>) {
   if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
   const id = Number(c.req.param("id"));
   if (!Number.isSafeInteger(id) || id <= 0) return bad(c, "รหัสสินค้าไม่ถูกต้อง");
@@ -240,20 +228,22 @@ app.delete("/api/items/:id", async (c) => {
     .bind(new Date().toISOString(), id).run();
   if (!result.meta.changes) return bad(c, "ไม่พบสินค้า หรือถูกลบแล้ว", 404);
   return c.json({ ok: true });
-});
+}
 
-app.post("/api/items", async (c) => {
+app.post("/api/items", (c) => createItem(c));
+async function createItem(c: Context<Env>, input?: any) {
   if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
-  const b = await c.req.json().catch(() => ({}));
+  const b = input ?? ((await c.req.json().catch(() => ({}))) || {});
   const name = String(b.name ?? "").trim();
   const itemTypeId = Number(b.itemTypeId);
   const price = Number(b.price);
   const amount = Number(b.amount ?? 0);
-  const subtypeID = b.itemSubtypeId ?? null;
+  if (b.itemSubtypeId != null || b.parentSubtypeId !== undefined) return bad(c, "ระบบมีเพียงประเภทหลักและประเภทย่อย");
+  const subtypeID = null;
   const owner = c.get("user").displayName;
   let id = Number(b.id);
 
-  if (!name) return bad(c, "ใส่ชื่อสินค้า");
+  if (!name || name.length > 100) return bad(c, "ใส่ชื่อประเภทย่อยไม่เกิน 100 ตัวอักษร");
   if (!Number.isInteger(itemTypeId)) return bad(c, "เลือกประเภทสินค้า");
   const type = await c.env.DB.prepare("SELECT ID FROM ItemType WHERE ID = ?").bind(itemTypeId).first();
   if (!type) return bad(c, "เลือกประเภทสินค้า");
@@ -287,7 +277,7 @@ app.post("/api/items", async (c) => {
   const results = await c.env.DB.batch(stmts);
   const finalId = Number(results[0].meta.last_row_id);
   return c.json({ ok: true, id: finalId });
-});
+}
 
 /* ------------------------------ stock ------------------------------ */
 
@@ -988,6 +978,8 @@ app.post("/api/import", async (c) => {
     const allowed = new Set(schema.results.map((column) => String(column.name)));
     for (const r of list) {
       if (!r || typeof r !== "object" || Array.isArray(r)) return bad(c, "แถวข้อมูลสำรองไม่ถูกต้อง");
+      // Flatten old three-level backups into main category -> sellable subtype.
+      if (t === "Items" && "ItemSubtypeID" in r) r.ItemSubtypeID = null;
       const cols = Object.keys(r);
       if (!cols.length || cols.some((col) => !allowed.has(col))) return bad(c, "คอลัมน์ข้อมูลสำรองไม่ถูกต้อง");
       if (cols.some((col) => r[col] !== null && !["string", "number"].includes(typeof r[col]))) {

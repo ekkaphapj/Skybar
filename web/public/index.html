@@ -391,13 +391,12 @@
 <section id="view-additem" class="view hidden">
   <header class="page-header">
     <button class="btn back" data-nav="main">← กลับ</button>
-    <div class="page-title">➕ เพิ่มสินค้าใหม่</div>
+    <div class="page-title">➕ เพิ่มประเภทย่อย</div>
   </header>
   <div class="card narrow">
     <div class="row">
-      <label class="field"><span>ประเภทสินค้า</span><select id="ai-type"></select></label>
-      <label class="field"><span>ประเภทย่อย</span><select id="ai-subtype"><option value="">ไม่ระบุประเภทย่อย</option></select></label>
-      <label class="field"><span>ชื่อสินค้า</span><input id="ai-name"></label>
+      <label class="field"><span>ประเภทหลัก</span><select id="ai-type"></select></label>
+      <label class="field"><span>ชื่อประเภทย่อย</span><input id="ai-name"></label>
     </div>
     <div class="row">
       <label class="field"><span>รหัสสินค้า (บาร์โค้ด, เว้นว่าง = สร้างอัตโนมัติ)</span><input id="ai-id" inputmode="numeric"></label>
@@ -420,7 +419,7 @@
   <header class="page-header">
     <button class="btn back" data-nav="main">← กลับ</button>
     <div class="page-title">▦ จัดการประเภทสินค้า</div>
-    <button class="btn primary" data-nav="additem">＋ เพิ่มสินค้า</button>
+    <button class="btn primary" data-nav="additem">＋ เพิ่มประเภทย่อย</button>
   </header>
   <div class="card">
     <div class="row"><h3 class="grow">ประเภทสินค้า</h3><button class="btn primary" id="btn-add-item-type">＋ เพิ่มประเภทสินค้า</button></div>
@@ -431,17 +430,17 @@
   </div>
   <div class="card hidden" id="subtype-management">
     <div class="row"><h3 id="subtype-parent-title">ประเภทย่อย</h3><button class="btn primary" id="btn-add-subtype">＋ เพิ่มประเภทย่อย</button></div>
-    <p class="hint">ประเภทย่อยอยู่ภายใต้ประเภทหลักนี้เท่านั้น ลบประเภทย่อยแล้วสินค้ายังคงอยู่ โดยไม่ระบุประเภทย่อย</p>
-    <table class="tbl mobile-records" id="subtype-table"><thead><tr><th>ประเภทย่อย</th><th>จำนวนสินค้า</th><th>จัดการ</th></tr></thead><tbody></tbody></table>
+    <p class="hint">มีเพียง 2 ระดับ: ประเภทหลัก → ประเภทย่อย (รายการขาย) เพิ่มหรือแก้ไขชื่อและราคาได้ที่นี่</p>
+    <table class="tbl mobile-records" id="subtype-table"><thead><tr><th>ประเภทย่อย</th><th>ราคา (บาท)</th><th>คงเหลือ</th><th>จัดการ</th></tr></thead><tbody></tbody></table>
   </div>
   <div class="card">
-    <h3>รายการสินค้า</h3>
+    <h3>รายการประเภทย่อย / สินค้าที่ขาย</h3>
     <div class="row">
       <label class="field grow"><span>ประเภทสินค้า</span><select id="products-type"><option value="">ทุกประเภท</option></select></label>
       <button class="btn" id="btn-refresh-products">โหลดข้อมูลใหม่</button>
     </div>
     <table class="tbl mobile-records" id="products-table">
-      <thead><tr><th>รหัส</th><th>สินค้า</th><th>ประเภท</th><th>ประเภทย่อย</th><th>ราคา (บาท)</th><th>คงเหลือ</th><th>จัดการ</th></tr></thead><tbody></tbody>
+      <thead><tr><th>รหัส</th><th>ประเภทย่อย</th><th>ประเภทหลัก</th><th>ราคา (บาท)</th><th>คงเหลือ</th><th>จัดการ</th></tr></thead><tbody></tbody>
     </table>
   </div>
 </section>
@@ -460,7 +459,7 @@
     <input type="hidden" id="delete-item-type-id">
     <p id="delete-item-type-summary"></p>
     <label class="field" id="delete-item-type-target-field"><span>ย้ายสินค้าทั้งหมดไปประเภท</span><select id="delete-item-type-target"></select></label>
-    <p class="hint">การลบประเภทจะลบประเภทย่อยภายในด้วย สินค้าที่ย้ายจะไม่ระบุประเภทย่อย โดยไม่ลบสินค้า สต็อก หรือประวัติธุรกรรม</p>
+    <p class="hint">ประเภทย่อยทั้งหมดจะย้ายไปประเภทหลักปลายทาง โดยคงรหัส ราคา สต็อก และประวัติเดิม</p>
     <p id="delete-item-type-error" class="error" role="status"></p>
     <div class="row"><button class="btn danger" id="btn-confirm-delete-item-type" type="submit">ยืนยันลบประเภท</button><button class="btn" type="button" id="btn-cancel-delete-item-type">ยกเลิก</button></div>
   </form>
@@ -471,20 +470,11 @@
     <h3 id="subtype-title">เพิ่มประเภทย่อย</h3><p id="subtype-parent-name"></p>
     <input type="hidden" id="subtype-id"><input type="hidden" id="subtype-parent-id">
     <label class="field"><span>ชื่อประเภทย่อย</span><input id="subtype-name" required maxlength="100"></label>
+    <label class="field"><span>ราคาขาย (บาท)</span><input id="subtype-price" type="number" min="0" step="0.01" required inputmode="decimal"></label>
     <p id="subtype-error" class="error" role="status"></p>
     <div class="row"><button class="btn primary" id="btn-save-subtype" type="submit">บันทึก</button><button class="btn" id="btn-cancel-subtype" type="button">ยกเลิก</button></div>
   </form>
 </dialog>
-<dialog id="product-subtype-dialog" class="customer-dialog" aria-labelledby="product-subtype-title">
-  <form id="product-subtype-form" class="card">
-    <h3 id="product-subtype-title">กำหนดประเภทย่อยสินค้า</h3><p id="product-subtype-name"></p>
-    <input type="hidden" id="product-subtype-item-id">
-    <label class="field"><span>ประเภทย่อย</span><select id="product-subtype-select"></select></label>
-    <p id="product-subtype-error" class="error" role="status"></p>
-    <div class="row"><button class="btn primary" id="btn-save-product-subtype" type="submit">บันทึก</button><button class="btn" id="btn-cancel-product-subtype" type="button">ยกเลิก</button></div>
-  </form>
-</dialog>
-
 <!-- ============ REPORT ============ -->
 <section id="view-report" class="view hidden">
   <header class="page-header">
@@ -558,8 +548,7 @@
     </div>
     <div id="ac-purchase" class="hidden"><div class="row">
       <label class="field"><span>ประเภทหลัก</span><select id="ac-main-type"></select></label>
-      <label class="field"><span>ประเภทย่อย</span><select id="ac-subtype"></select></label>
-      <label class="field grow"><span>สินค้า</span><select id="ac-item"></select></label>
+            <label class="field grow"><span>ประเภทย่อย / สินค้า</span><select id="ac-item"></select></label>
       <label class="field"><span>จำนวนที่ซื้อ</span><input type="number" min="1" step="1" id="ac-qty" value="1"></label>
       <label class="field"><span>ซื้อจาก</span><input id="ac-place" maxlength="200"></label>
     </div><p class="hint">ราคาที่กรอกคือยอดรวมทั้งรายการ เมื่อบันทึกระบบเพิ่มสต็อกอัตโนมัติ</p></div>
@@ -723,7 +712,7 @@
 <script src="/restaurant.js?v=9961ed57f61c"></script>
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=fe139e5e6cd0"></script>
-<script src="/accounts.js?v=5063ec5a2de4"></script>
-<script src="/app.js?v=4d38d0282cb1"></script>
+<script src="/accounts.js?v=ba3e546a26fc"></script>
+<script src="/app.js?v=b0345e376a8c"></script>
 </body>
 </html>

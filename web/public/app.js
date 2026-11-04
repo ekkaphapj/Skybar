@@ -757,13 +757,11 @@ async function saveDeposit() {
 
 /* ---------------- add item ---------------- */
 async function initAddItem() {
-  for (const id of ["ai-type", "ai-subtype", "btn-save-item"]) $(id).disabled = true;
+  for (const id of ["ai-type", "btn-save-item"]) $(id).disabled = true;
   try {
     await loadItemTypes();
-    await loadItemSubtypes();
-    fillSubtypeSelect($("ai-subtype"), Number($("ai-type").value));
   } finally {
-    for (const id of ["ai-type", "ai-subtype", "btn-save-item"]) $(id).disabled = false;
+    for (const id of ["ai-type", "btn-save-item"]) $(id).disabled = false;
   }
 }
 async function saveItem() {
@@ -773,7 +771,6 @@ async function saveItem() {
       body: {
         name: $("ai-name").value,
         itemTypeId: Number($("ai-type").value) || undefined,
-        itemSubtypeId: $("ai-subtype").value ? Number($("ai-subtype").value) : null,
         price: $("ai-price").value,
         amount: $("ai-amount").value || "0",
         owner: $("ai-owner").value,
@@ -791,10 +788,6 @@ async function saveItem() {
 let productsRequest = 0;
 let itemSubtypes = [], managedSubtypeParent = null;
 async function loadItemSubtypes() { itemSubtypes = await api("/api/item-subtypes"); }
-function fillSubtypeSelect(select, parentID, selected = null) {
-  select.innerHTML = '<option value="">ไม่ระบุประเภทย่อย</option>' + itemSubtypes.filter(t => t.ItemTypeID === parentID).map(t => `<option value="${t.ID}">${esc(t.Name1)}</option>`).join("");
-  select.value = selected === null ? "" : String(selected);
-}
 function showSubtypeManagement(parentID) {
   managedSubtypeParent = Number(parentID);
   const parent = itemTypes.find(t => t.ID === managedSubtypeParent && t.Name1 !== "ส่วนลด");
@@ -802,8 +795,8 @@ function showSubtypeManagement(parentID) {
   if (!parent) { managedSubtypeParent = null; return; }
   $("subtype-parent-title").textContent = "ประเภทย่อย · " + parent.Name1;
   const rows = itemSubtypes.filter(t => t.ItemTypeID === parent.ID);
-  fillTable("subtype-table", rows, t => [esc(t.Name1), num(t.itemCount), `<div class="row"><button class="btn" data-edit-subtype="${t.ID}">แก้ไข</button><button class="btn danger" data-delete-subtype="${t.ID}">ลบประเภทย่อย</button></div>`]);
-  if (!rows.length) $("subtype-table").querySelector("tbody").innerHTML = '<tr><td colspan="3">ยังไม่มีประเภทย่อย เพิ่มได้จากปุ่มด้านบน</td></tr>';
+  fillTable("subtype-table", rows, t => [esc(t.Name1), fmt2(t.Price), num(t.Amount), `<div class="row"><button class="btn" data-edit-subtype="${t.ID}">แก้ไข</button><button class="btn danger" data-delete-subtype="${t.ID}">ลบประเภทย่อย</button></div>`]);
+  if (!rows.length) $("subtype-table").querySelector("tbody").innerHTML = '<tr><td colspan="4">ยังไม่มีประเภทย่อย เพิ่มได้จากปุ่มด้านบน</td></tr>';
 }
 function openSubtypeEditor(id = null) {
   if (currentUser?.role !== "admin") return;
@@ -816,6 +809,7 @@ function openSubtypeEditor(id = null) {
   $("subtype-parent-id").value = parent.ID;
   $("subtype-id").value = sub?.ID || "";
   $("subtype-name").value = sub?.Name1 || "";
+  $("subtype-price").value = sub ? sub.Price : "";
   $("subtype-error").textContent = "";
   $("subtype-dialog").showModal();
 }
@@ -825,7 +819,7 @@ async function saveSubtype(event) {
   const button = $("btn-save-subtype"), id = $("subtype-id").value;
   button.disabled = true;
   try {
-    await api("/api/item-subtypes" + (id ? "/" + id : ""), { method: id ? "PUT" : "POST", body: { name: $("subtype-name").value, itemTypeId: Number($("subtype-parent-id").value) } });
+    await api("/api/item-subtypes" + (id ? "/" + id : ""), { method: id ? "PUT" : "POST", body: { name: $("subtype-name").value, price: Number($("subtype-price").value), itemTypeId: Number($("subtype-parent-id").value) } });
     $("subtype-dialog").close(); toast("บันทึกประเภทย่อยแล้ว"); await initProducts();
   } catch (e) { $("subtype-error").textContent = e.message; }
   finally { button.disabled = false; }
@@ -833,30 +827,10 @@ async function saveSubtype(event) {
 async function deleteSubtype(id, button) {
   if (currentUser?.role !== "admin" || button.disabled) return;
   const sub = itemSubtypes.find(t => t.ID === Number(id));
-  if (!sub || !confirm(`ยืนยันลบประเภทย่อย “${sub.Name1}”? สินค้า ${sub.itemCount} รายการจะยังอยู่ในประเภทหลักเดิม โดยไม่ระบุประเภทย่อย ยอดสต็อกและประวัติไม่เปลี่ยนแปลง`)) return;
+  if (!sub || !confirm(`ยืนยันลบประเภทย่อย “${sub.Name1}” ออกจากหน้าขายและสต็อก? ประวัติการขายและรายงานเดิมจะยังอยู่`)) return;
   button.disabled = true;
   try { await api("/api/item-subtypes/" + sub.ID, { method: "DELETE" }); toast("ลบประเภทย่อยแล้ว"); await initProducts(); }
   catch (e) { toastErr(e.message); }
-  finally { button.disabled = false; }
-}
-async function openProductSubtypeEditor(id) {
-  if (currentUser?.role !== "admin") return;
-  const [item] = await Promise.all([api("/api/items/" + Number(id)), loadItemSubtypes()]);
-  $("product-subtype-item-id").value = item.ID;
-  $("product-subtype-name").textContent = item.Name1 + " · " + item.TypeName;
-  fillSubtypeSelect($("product-subtype-select"), item.ItemTypeID, item.ItemSubtypeID);
-  $("product-subtype-error").textContent = "";
-  $("product-subtype-dialog").showModal();
-}
-async function saveProductSubtype(event) {
-  event.preventDefault();
-  if (currentUser?.role !== "admin") return;
-  const button = $("btn-save-product-subtype"), value = $("product-subtype-select").value;
-  button.disabled = true;
-  try {
-    await api("/api/items/" + $("product-subtype-item-id").value + "/subtype", { method: "PUT", body: { itemSubtypeId: value ? Number(value) : null } });
-    $("product-subtype-dialog").close(); toast("บันทึกประเภทย่อยสินค้าแล้ว"); await initProducts();
-  } catch (e) { $("product-subtype-error").textContent = e.message; }
   finally { button.disabled = false; }
 }
 async function initProducts() {
@@ -866,7 +840,7 @@ async function initProducts() {
   $("products-type").innerHTML = '<option value="">ทุกประเภท</option>' + itemTypes.map(t => `<option value="${esc(t.Name1)}">${esc(t.Name1)}</option>`).join("");
   if (itemTypes.some(t => t.Name1 === selectedType)) $("products-type").value = selectedType;
   $("item-type-table").querySelector("tbody").innerHTML = itemTypes.map(t => `<tr>
-    <td data-label="ประเภทสินค้า">${esc(t.Name1)}</td><td data-label="จำนวนสินค้า">${num(t.itemCount)}</td>
+    <td data-label="ประเภทหลัก">${esc(t.Name1)}</td><td data-label="จำนวนสินค้า">${num(t.itemCount)}</td>
     <td data-label="จัดการ">${t.Name1 === "ส่วนลด" ? '<span class="hint">ประเภทพิเศษของระบบ</span>' : `<div class="row"><button class="btn" data-manage-subtypes="${t.ID}">ประเภทย่อย (${itemSubtypes.filter(st => st.ItemTypeID === t.ID).length})</button><button class="btn" data-edit-item-type="${t.ID}">แก้ไข</button><button class="btn danger" data-delete-item-type="${t.ID}">ลบประเภท</button></div>`}</td></tr>`).join("");
   showSubtypeManagement(managedSubtypeParent);
   await loadProductsTable();
@@ -875,8 +849,8 @@ async function loadProductsTable() {
   const request = ++productsRequest;
   const rows = await api("/api/items?typeName=" + encodeURIComponent($("products-type").value));
   if (request !== productsRequest) return;
-  fillTable("products-table", rows, r => [r.ID, esc(r.Name1), esc(r.TypeName), esc(r.SubtypeName || "ไม่ระบุ"), r.TypeName === "ส่วนลด" ? num(r.Price) : fmt2(r.Price), num(r.Amount), currentUser?.role === "admin" ? `<div class="row">${r.TypeName === "ส่วนลด" ? "" : `<button class="btn" data-product-subtype="${r.ID}">กำหนดประเภทย่อย</button>`}<button class="btn danger" data-delete-product="${r.ID}" data-product-name="${esc(r.Name1)}">ลบสินค้า</button></div>` : "-"]);
-  if (!rows.length) $("products-table").querySelector("tbody").innerHTML = '<tr class="empty-row"><td colspan="7">ยังไม่มีสินค้าในประเภทนี้</td></tr>';
+  fillTable("products-table", rows, r => [r.ID, esc(r.Name1), esc(r.TypeName), r.TypeName === "ส่วนลด" ? num(r.Price) : fmt2(r.Price), num(r.Amount), currentUser?.role === "admin" ? `<div class="row">${r.TypeName === "ส่วนลด" ? "" : `<button class="btn" data-edit-subtype="${r.ID}">แก้ไขชื่อ / ราคา</button>`}<button class="btn danger" data-delete-product="${r.ID}" data-product-name="${esc(r.Name1)}">ลบสินค้า</button></div>` : "-"]);
+  if (!rows.length) $("products-table").querySelector("tbody").innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีประเภทย่อยในประเภทหลักนี้</td></tr>';
 }
 async function deleteProductItem(button) {
   if (currentUser?.role !== "admin") return;
@@ -1200,8 +1174,6 @@ function wire() {
     if (deleteSub) { deleteSubtype(deleteSub.dataset.deleteSubtype, deleteSub); return; }
     const deleteProduct = e.target.closest("[data-delete-product]");
     if (deleteProduct) { deleteProductItem(deleteProduct); return; }
-    const productSub = e.target.closest("[data-product-subtype]");
-    if (productSub) { openProductSubtypeEditor(productSub.dataset.productSubtype).catch(e => toastErr(e.message)); return; }
     const editType = e.target.closest("[data-edit-item-type]");
     if (editType) { openItemTypeEditor(editType.dataset.editItemType); return; }
     const deleteType = e.target.closest("[data-delete-item-type]");
@@ -1309,9 +1281,6 @@ function wire() {
   $("btn-add-subtype").onclick = () => openSubtypeEditor();
   $("subtype-form").onsubmit = saveSubtype;
   $("btn-cancel-subtype").onclick = () => $("subtype-dialog").close();
-  $("product-subtype-form").onsubmit = saveProductSubtype;
-  $("btn-cancel-product-subtype").onclick = () => $("product-subtype-dialog").close();
-  $("ai-type").onchange = () => fillSubtypeSelect($("ai-subtype"), Number($("ai-type").value));
   $("btn-add-item-type").onclick = () => openItemTypeEditor();
   $("item-type-form").onsubmit = saveItemType;
   $("btn-cancel-item-type").onclick = () => $("item-type-dialog").close();

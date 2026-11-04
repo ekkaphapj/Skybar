@@ -1,6 +1,6 @@
 /* Accounting UI shares authenticated API and formatting with app.js. */
 globalThis.Ledger = (() => {
-  let rows = [], items = [], types = [], subtypes = [], editing = null, request = 0, monthly = null;
+  let rows = [], items = [], types = [], editing = null, request = 0, monthly = null;
   const purchase = () => !editing && $('ac-type').value === 'รายจ่าย' && $('ac-category').value === 'purchase';
   function updateForm() {
     const exchange = $('ac-type').value === 'แลกเงินสด';
@@ -9,23 +9,19 @@ globalThis.Ledger = (() => {
     $('ac-purchase').classList.toggle('hidden', !purchase() && !editing?.StockTransactionID);
     $('ac-payment').disabled = exchange || !!(editing?.BillID && !editing.StockTransactionID);
     if (exchange) $('ac-payment').value = 'เงินสด';
-    for (const id of ['ac-main-type', 'ac-subtype', 'ac-item', 'ac-place']) $(id).disabled = !!editing;
+    for (const id of ['ac-main-type', 'ac-item', 'ac-place']) $(id).disabled = !!editing;
   }
   function selectItems() {
-    const main = Number($('ac-main-type').value), sub = $('ac-subtype').value;
-    $('ac-item').innerHTML = items.filter(i => i.ItemTypeID === main && (!sub || (sub === 'none' ? !i.ItemSubtypeID : i.ItemSubtypeID === Number(sub))))
+    const main = Number($('ac-main-type').value);
+    $('ac-item').innerHTML = items.filter(i => i.ItemTypeID === main)
       .map(i => `<option value="${i.ID}">${esc(i.Name1)} · เหลือ ${num(i.Amount)}</option>`).join('');
-  }
-  function selectSubtypes() {
-    $('ac-subtype').innerHTML = '<option value="">ทุกประเภทย่อย</option><option value="none">ไม่ระบุประเภทย่อย</option>' + subtypes.filter(s => s.ItemTypeID === Number($('ac-main-type').value)).map(s => `<option value="${s.ID}">${esc(s.Name1)}</option>`).join('');
-    selectItems();
   }
   function reset() {
     editing = null; $('ac-form').reset(); $('ac-date').value = $('ac-from').value || businessDate();
     $('ac-type').disabled = false; $('ac-date').disabled = false; $('ac-amount').disabled = false;
     $('ac-amount').min = '0.01';
     $('ac-form-title').textContent = 'บันทึกรายการ'; $('ac-edit-note').textContent = ''; $('ac-error').textContent = '';
-    $('ac-cancel').classList.add('hidden'); updateForm(); selectSubtypes();
+    $('ac-cancel').classList.add('hidden'); updateForm(); selectItems();
   }
   async function load() {
     const seq = ++request;
@@ -37,7 +33,7 @@ globalThis.Ledger = (() => {
     fillTable('ac-table', rows, r => [esc(r.Date1), esc(r.Type + ' · ' + r.DisplayCategory), esc(r.List) + (r.Note ? '<br>' + esc(r.Note) : ''), r.Quantity == null ? '–' : `${esc(r.ItemName)} × ${num(r.Quantity)}`, fmt2(r.Amount), esc(r.PaymentType), esc(r.Owner), currentUser?.role === 'admin' ? `<div class="row"><button class="btn" data-edit-ledger="${r.ID}">แก้ไข</button><button class="btn danger" data-delete-ledger="${r.ID}">ลบ</button></div>` : '–']);
   }
   async function init() {
-    [items, types, subtypes] = await Promise.all([api('/api/items'), api('/api/item-types'), api('/api/item-subtypes')]);
+    [items, types] = await Promise.all([api('/api/items'), api('/api/item-types')]);
     $('ac-main-type').innerHTML = types.filter(t => t.Name1 !== 'ส่วนลด').map(t => `<option value="${t.ID}">${esc(t.Name1)}</option>`).join('');
     if (!$('ac-from').value) $('ac-from').value = $('ac-to').value = businessDate();
     reset(); await load();
@@ -49,7 +45,7 @@ globalThis.Ledger = (() => {
     $('ac-date').value = row.Date1; $('ac-list').value = row.Note || row.List; $('ac-amount').value = row.Amount;
     $('ac-payment').value = row.PaymentType; $('ac-qty').value = row.Quantity || 1;
     if (row.StockTransactionID) {
-      $('ac-main-type').value = row.ItemTypeID; selectSubtypes(); $('ac-subtype').value = row.ItemSubtypeID || 'none'; selectItems(); $('ac-item').value = row.ItemID; $('ac-place').value = row.Place;
+      $('ac-main-type').value = row.ItemTypeID; selectItems(); $('ac-item').value = row.ItemID; $('ac-place').value = row.Place;
     }
     const sale = !!row.BillID && !row.StockTransactionID;
     $('ac-date').disabled = sale; $('ac-amount').disabled = sale; $('ac-amount').min = '0';
@@ -102,7 +98,7 @@ globalThis.Ledger = (() => {
     const task = fn => () => fn().catch(e => toastErr(e.message));
     $('ac-form').onsubmit = save; $('ac-cancel').onclick = reset;
     $('ac-type').onchange = updateForm; $('ac-category').onchange = updateForm;
-    $('ac-main-type').onchange = selectSubtypes; $('ac-subtype').onchange = selectItems;
+    $('ac-main-type').onchange = selectItems;
     $('ac-search').onclick = task(load); $('ac-today').onclick = task(async () => { $('ac-from').value = $('ac-to').value = businessDate(); await load(); });
     $('ac-table').onclick = e => {
       const editButton = e.target.closest('[data-edit-ledger]'), deleteButton = e.target.closest('[data-delete-ledger]');
