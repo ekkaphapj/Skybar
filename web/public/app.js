@@ -875,8 +875,18 @@ async function loadProductsTable() {
   const request = ++productsRequest;
   const rows = await api("/api/items?typeName=" + encodeURIComponent($("products-type").value));
   if (request !== productsRequest) return;
-  fillTable("products-table", rows, r => [r.ID, esc(r.Name1), esc(r.TypeName), esc(r.SubtypeName || "ไม่ระบุ"), r.TypeName === "ส่วนลด" ? num(r.Price) : fmt2(r.Price), num(r.Amount), r.TypeName === "ส่วนลด" ? "-" : `<button class="btn" data-product-subtype="${r.ID}">กำหนดประเภทย่อย</button>`]);
+  fillTable("products-table", rows, r => [r.ID, esc(r.Name1), esc(r.TypeName), esc(r.SubtypeName || "ไม่ระบุ"), r.TypeName === "ส่วนลด" ? num(r.Price) : fmt2(r.Price), num(r.Amount), currentUser?.role === "admin" ? `<div class="row">${r.TypeName === "ส่วนลด" ? "" : `<button class="btn" data-product-subtype="${r.ID}">กำหนดประเภทย่อย</button>`}<button class="btn danger" data-delete-product="${r.ID}" data-product-name="${esc(r.Name1)}">ลบสินค้า</button></div>` : "-"]);
   if (!rows.length) $("products-table").querySelector("tbody").innerHTML = '<tr class="empty-row"><td colspan="7">ยังไม่มีสินค้าในประเภทนี้</td></tr>';
+}
+async function deleteProductItem(button) {
+  if (currentUser?.role !== "admin") return;
+  if (!confirm(`ลบสินค้า “${button.dataset.productName}” ออกจากรายการสินค้าและหน้าขาย? ประวัติการขายและรายงานเดิมจะยังอยู่`)) return;
+  button.disabled = true;
+  try {
+    await api("/api/items/" + button.dataset.deleteProduct, { method: "DELETE" });
+    await initProducts(); toast("ลบสินค้าแล้ว");
+  } catch (e) { toastErr(e.message); }
+  finally { button.disabled = false; }
 }
 function openItemTypeEditor(id = null) {
   if (currentUser?.role !== "admin") return;
@@ -1188,6 +1198,8 @@ function wire() {
     if (editSub) { openSubtypeEditor(editSub.dataset.editSubtype); return; }
     const deleteSub = e.target.closest("[data-delete-subtype]");
     if (deleteSub) { deleteSubtype(deleteSub.dataset.deleteSubtype, deleteSub); return; }
+    const deleteProduct = e.target.closest("[data-delete-product]");
+    if (deleteProduct) { deleteProductItem(deleteProduct); return; }
     const productSub = e.target.closest("[data-product-subtype]");
     if (productSub) { openProductSubtypeEditor(productSub.dataset.productSubtype).catch(e => toastErr(e.message)); return; }
     const editType = e.target.closest("[data-edit-item-type]");

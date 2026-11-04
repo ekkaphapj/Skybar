@@ -84,7 +84,7 @@ app.get("/api/dashboard", async (c) => {
 /* ------------------------------ item types & items ------------------------------ */
 
 app.get("/api/item-types", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT t.ID, t.Name1, COUNT(i.ID) AS itemCount FROM ItemType t LEFT JOIN Items i ON i.ItemTypeID = t.ID GROUP BY t.ID ORDER BY t.ID").all();
+  const { results } = await c.env.DB.prepare("SELECT t.ID, t.Name1, COUNT(i.ID) AS itemCount FROM ItemType t LEFT JOIN Items i ON i.ItemTypeID = t.ID AND i.DeletedAt IS NULL GROUP BY t.ID ORDER BY t.ID").all();
   return c.json(results);
 });
 
@@ -154,7 +154,7 @@ app.get("/api/item-subtypes", async (c) => {
   const typeID = c.req.query("typeID");
   if (typeID && (!Number.isSafeInteger(Number(typeID)) || Number(typeID) <= 0)) return bad(c, "รหัสประเภทสินค้าไม่ถูกต้อง");
   const { results } = await c.env.DB.prepare(`SELECT st.ID, st.ItemTypeID, st.Name1, COUNT(i.ID) AS itemCount
-    FROM ItemSubtype st LEFT JOIN Items i ON i.ItemSubtypeID = st.ID
+    FROM ItemSubtype st LEFT JOIN Items i ON i.ItemSubtypeID = st.ID AND i.DeletedAt IS NULL
     ${typeID ? "WHERE st.ItemTypeID = ?" : ""} GROUP BY st.ID ORDER BY st.ItemTypeID, st.Name1`)
     .bind(...(typeID ? [Number(typeID)] : [])).all();
   return c.json(results);
@@ -197,7 +197,7 @@ app.put("/api/items/:id/subtype", async (c) => {
   if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
   const id = Number(c.req.param("id")), b = await c.req.json().catch(() => ({}));
   if (!Number.isSafeInteger(id) || id <= 0 || (b.itemSubtypeId !== null && (!Number.isSafeInteger(b.itemSubtypeId) || b.itemSubtypeId <= 0))) return bad(c, "เลือกประเภทย่อยให้ถูกต้อง");
-  const result = await c.env.DB.prepare(`UPDATE Items SET ItemSubtypeID = ? WHERE ID = ?
+  const result = await c.env.DB.prepare(`UPDATE Items SET ItemSubtypeID = ? WHERE ID = ? AND DeletedAt IS NULL
     AND (? IS NULL OR EXISTS (SELECT 1 FROM ItemSubtype WHERE ID = ? AND ItemTypeID = Items.ItemTypeID))`)
     .bind(b.itemSubtypeId, id, b.itemSubtypeId, b.itemSubtypeId).run();
   if (!result.meta.changes) return bad(c, "ไม่พบสินค้า หรือประเภทย่อยไม่อยู่ในประเภทหลักของสินค้า", 409);
@@ -207,10 +207,10 @@ app.put("/api/items/:id/subtype", async (c) => {
 app.get("/api/items", async (c) => {
   const typeName = c.req.query("typeName");
   let sql = `SELECT i.ID, i.Name1, i.Price, i.ItemTypeID, i.ItemSubtypeID, st.Name1 AS SubtypeName, t.Name1 AS TypeName, IFNULL(s.Amount, 0) AS Amount
-             FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID LEFT JOIN ItemSubtype st ON st.ID = i.ItemSubtypeID`;
+             FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID LEFT JOIN ItemSubtype st ON st.ID = i.ItemSubtypeID WHERE i.DeletedAt IS NULL`;
   const binds: unknown[] = [];
   if (typeName) {
-    sql += " WHERE t.Name1 = ?";
+    sql += " AND t.Name1 = ?";
     binds.push(typeName);
   }
   sql += " ORDER BY t.ID, i.Name1";
@@ -224,12 +224,22 @@ app.get("/api/items/:id", async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT i.ID, i.Name1, i.Price, i.ItemTypeID, i.ItemSubtypeID, st.Name1 AS SubtypeName, t.Name1 AS TypeName, IFNULL(s.Amount, 0) AS Amount
      FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID LEFT JOIN ItemSubtype st ON st.ID = i.ItemSubtypeID
-     WHERE i.ID = ?`
+     WHERE i.ID = ? AND i.DeletedAt IS NULL`
   )
     .bind(id)
     .first();
   if (!row) return bad(c, "ไม่พบสินค้า หรือรหัสสินค้าไม่ถูกต้อง", 404);
   return c.json(row);
+});
+
+app.delete("/api/items/:id", async (c) => {
+  if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id <= 0) return bad(c, "รหัสสินค้าไม่ถูกต้อง");
+  const result = await c.env.DB.prepare("UPDATE Items SET DeletedAt = ? WHERE ID = ? AND DeletedAt IS NULL")
+    .bind(new Date().toISOString(), id).run();
+  if (!result.meta.changes) return bad(c, "ไม่พบสินค้า หรือถูกลบแล้ว", 404);
+  return c.json({ ok: true });
 });
 
 app.post("/api/items", async (c) => {
@@ -284,10 +294,10 @@ app.post("/api/items", async (c) => {
 app.get("/api/stock", async (c) => {
   const typeName = c.req.query("typeName");
   let sql = `SELECT i.ID AS itemCode, i.Name1 AS name, t.Name1 AS typeName, IFNULL(s.Amount,0) AS amount, s.Date1 AS date, s.Time1 AS time
-             FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID`;
+             FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID LEFT JOIN Stock s ON s.ItemID = i.ID WHERE i.DeletedAt IS NULL`;
   const binds: unknown[] = [];
   if (typeName) {
-    sql += " WHERE t.Name1 = ?";
+    sql += " AND t.Name1 = ?";
     binds.push(typeName);
   }
   sql += " ORDER BY t.Name1, i.Name1";
@@ -318,7 +328,7 @@ app.put("/api/stock/:itemID", async (c) => {
   const amount = b.amount, expected = b.expectedAmount;
   if (!Number.isSafeInteger(itemID) || itemID <= 0 || !Number.isSafeInteger(amount) || !Number.isSafeInteger(expected) || !Number.isSafeInteger(amount - expected)) return bad(c, "จำนวนสต็อกต้องเป็นจำนวนเต็ม");
   const db = c.env.DB, today = businessDate(), time = nowTime(), owner = c.get("user").displayName;
-  const item = await db.prepare("SELECT i.ID, IFNULL(s.Amount, 0) AS amount FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID WHERE i.ID = ?").bind(itemID).first<{ ID: number; amount: number }>();
+  const item = await db.prepare("SELECT i.ID, IFNULL(s.Amount, 0) AS amount FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID WHERE i.ID = ? AND i.DeletedAt IS NULL").bind(itemID).first<{ ID: number; amount: number }>();
   if (!item) return bad(c, "ไม่พบรหัสสินค้านี้", 404);
   if (item.amount !== expected) return bad(c, "สต็อกเปลี่ยนแปลงแล้ว กรุณาโหลดข้อมูลใหม่", 409);
   if (amount === expected) return c.json({ ok: true, changed: false });
@@ -372,7 +382,7 @@ app.post("/api/stock/transaction", async (c) => {
     if (!Number.isFinite(price) || price < 0 || price !== money(price)) return bad(c, "ราคาสินค้าไม่ถูกต้อง");
     if (!place) return bad(c, "ใส่สถานที่ด้วย");
     if (!PAYMENT_TYPES.slice(0, 3).includes(paymentType)) return bad(c, "เลือกวิธีชำระเงิน");
-    const item = await db.prepare("SELECT i.Name1 FROM Items i JOIN ItemType t ON t.ID = i.ItemTypeID WHERE i.ID = ? AND t.Name1 <> ?").bind(itemID, DISCOUNT_TYPE_NAME).first();
+    const item = await db.prepare("SELECT i.Name1 FROM Items i JOIN ItemType t ON t.ID = i.ItemTypeID WHERE i.ID = ? AND i.DeletedAt IS NULL AND t.Name1 <> ?").bind(itemID, DISCOUNT_TYPE_NAME).first();
     if (!item) return bad(c, "ไม่พบรหัสสินค้านี้");
 
     const list = `รายการซื้อของ ${item.Name1} จำนวน ${amount} ชิ้น`;
@@ -424,7 +434,7 @@ app.post("/api/stock/transaction", async (c) => {
     const comment = String(b.comment ?? "");
     if (!Number.isInteger(itemID) || itemID <= 0) return bad(c, "รหัสสินค้าไม่ถูกต้อง");
     if (!Number.isInteger(amount) || amount <= 0) return bad(c, "จำนวนสินค้าไม่ถูกต้อง");
-    const item = await db.prepare("SELECT Name1 FROM Items WHERE ID = ?").bind(itemID).first();
+    const item = await db.prepare("SELECT Name1 FROM Items WHERE ID = ? AND DeletedAt IS NULL").bind(itemID).first();
     if (!item) return bad(c, "ไม่พบรหัสสินค้านี้");
     stmts.push(
       db.prepare(
@@ -579,7 +589,7 @@ app.put("/api/orders/:id", async (c) => {
   if (items.length) {
     const ids = [...new Set(items.map((it) => Number(it.itemID)))];
     const { results } = await c.env.DB.prepare(
-      `SELECT i.ID, i.Name1, i.Price, t.Name1 AS TypeName FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID WHERE i.ID IN (${ids.map(() => "?").join(",")})`
+      `SELECT i.ID, i.Name1, i.Price, t.Name1 AS TypeName FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID WHERE i.DeletedAt IS NULL AND i.ID IN (${ids.map(() => "?").join(",")})`
     ).bind(...ids).all();
     const catalog = new Map(results.map((row) => [Number(row.ID), row]));
     for (const it of items) {
@@ -654,7 +664,7 @@ async function completeSale(c: Context<Env>, b: any, order?: any) {
     if (!Number.isInteger(qty) || qty < 1) return bad(c, "จำนวนสินค้าไม่ถูกต้อง");
     const row = await db
       .prepare(
-        `SELECT i.ID, i.Name1, i.Price, t.Name1 AS TypeName FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID WHERE i.ID = ?`
+        `SELECT i.ID, i.Name1, i.Price, t.Name1 AS TypeName FROM Items i JOIN ItemType t ON i.ItemTypeID = t.ID WHERE i.ID = ? AND i.DeletedAt IS NULL`
       )
       .bind(itemID)
       .first();
@@ -849,7 +859,7 @@ async function report(c: Context<Env>, todayOnly = false, period?: { from: strin
   const [stockRemaining, sellByDate, costByDate, cashTx, cashCum, sums, sellSums, voucherIssued, voucherUsed] = await Promise.all([
     db.prepare(
       `SELECT i.Name1 AS name, s.Amount AS amount FROM Stock s JOIN Items i ON s.ItemID = i.ID
-       JOIN ItemType t ON t.ID = i.ItemTypeID WHERE t.Name1 <> ? ORDER BY s.Amount, i.ID`
+       JOIN ItemType t ON t.ID = i.ItemTypeID WHERE i.DeletedAt IS NULL AND t.Name1 <> ? ORDER BY s.Amount, i.ID`
     ).bind(DISCOUNT_TYPE_NAME).all(),
     db.prepare(
       `SELECT i.Name1 AS name, t.Name1 = 'ส่วนลด' AS isDiscount, SUM(s.Amount) AS qty, SUM(s.Price) AS total
@@ -1004,6 +1014,8 @@ app.post("/api/import", async (c) => {
 /* ------------------------------ errors & assets ------------------------------ */
 
 app.onError((err, c) => {
+  if (err.message.includes("product_in_open_order")) return bad(c, "สินค้านี้อยู่ในโต๊ะที่เปิดขาย กรุณานำออกจากโต๊ะหรือเช็คบิลก่อนลบ", 409);
+  if (err.message.includes("product_deleted")) return bad(c, "สินค้าถูกลบแล้ว กรุณาโหลดรายการใหม่", 409);
   console.error(err);
   return c.json({ error: "เกิดข้อผิดพลาดภายในระบบ: " + (err instanceof Error ? err.message : String(err)) }, 500);
 });

@@ -71,6 +71,7 @@ npm run test:accounts       # ทดสอบบัญชีรายวัน/�
 npm run test:logic          # unit test กฎวันที่ธุรกิจ/เลขบิล
 npm run test:frontend       # ทดสอบตะกร้า/ส่วนลด/การแสดงชื่อสินค้า
 npm run test:delete         # ทดสอบสิทธิ์ลบ/ย้อนเงินสดและสต็อก/ลบพร้อมกัน (local เท่านั้น)
+npm run test:delete-products # ทดสอบลบสินค้าเฉพาะ admin/เก็บประวัติ/ป้องกันลบสินค้าบนโต๊ะ (local เท่านั้น)
 npm run test:report         # ทดสอบสิทธิ์รายวัน/ข้อมูลภาพสรุป/แบ่งหน้า PNG (local เท่านั้น)
 npm run test:scene          # ทดสอบจำนวนคน/ตัวเลขฉากเต็มจอ/วันธุรกิจ/backup เดิม (local เท่านั้น)
 npm run test:regression     # ทดสอบคำขอพร้อมกันและสำรอง/นำเข้า (local เท่านั้น)
