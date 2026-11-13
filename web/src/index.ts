@@ -314,23 +314,31 @@ app.get("/api/stock/transactions", async (c) => {
 app.put("/api/stock/:itemID", async (c) => {
   if (c.get("user").role !== "admin") return bad(c, "เฉพาะผู้ดูแลระบบเท่านั้น", 403);
   const itemID = Number(c.req.param("itemID"));
-  const b = await c.req.json().catch(() => ({}));
-  const amount = b.amount, expected = b.expectedAmount;
-  if (!Number.isSafeInteger(itemID) || itemID <= 0 || !Number.isSafeInteger(amount) || !Number.isSafeInteger(expected) || !Number.isSafeInteger(amount - expected)) return bad(c, "จำนวนสต็อกต้องเป็นจำนวนเต็ม");
+  const b = (await c.req.json().catch(() => ({}))) ?? {};
+  const action = b.action ?? "set", expected = b.expectedAmount;
+  if (!["set", "reduce", "dispose"].includes(action)) return bad(c, "เลือกวิธีแก้ไขสต็อก");
+  if (!Number.isSafeInteger(itemID) || itemID <= 0 || !Number.isSafeInteger(expected)) return bad(c, "จำนวนสต็อกต้องเป็นจำนวนเต็ม");
+  if (action !== "set" && (!Number.isSafeInteger(b.quantity) || b.quantity <= 0)) return bad(c, "จำนวนที่ลดต้องเป็นจำนวนเต็มมากกว่า 0");
+  const amount = action === "set" ? b.amount : expected - b.quantity;
+  if (!Number.isSafeInteger(amount) || !Number.isSafeInteger(amount - expected)) return bad(c, "จำนวนสต็อกต้องเป็นจำนวนเต็ม");
   const db = c.env.DB, today = businessDate(), time = nowTime(), owner = c.get("user").displayName;
   const item = await db.prepare("SELECT i.ID, IFNULL(s.Amount, 0) AS amount FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID WHERE i.ID = ? AND i.DeletedAt IS NULL").bind(itemID).first<{ ID: number; amount: number }>();
   if (!item) return bad(c, "ไม่พบรหัสสินค้านี้", 404);
   if (item.amount !== expected) return bad(c, "สต็อกเปลี่ยนแปลงแล้ว กรุณาโหลดข้อมูลใหม่", 409);
+  if (action !== "set" && amount < 0) return bad(c, "จำนวนที่ลดเกินสต็อกคงเหลือ");
   if (amount === expected) return c.json({ ok: true, changed: false });
+  const reason = action === "dispose" ? String(b.comment ?? "").trim() : "";
+  const comment = `คงเหลือ ${expected} → ${amount} (${time})${reason ? " · " + reason : ""}`;
+  const transactionType = action === "dispose" ? "ตัดจำหน่ายของเสีย" : `แก้ไขโดย ${owner}`;
   // Both statements compare the displayed quantity inside one atomic batch.
   // A concurrent sale or adjustment cannot be overwritten or create a false audit entry.
   const [audit] = await db.batch([
     db.prepare(`INSERT INTO StockTransaction (TransactionType, Amount, Price, DateRecord, Date2, ItemID, PaymentType, Owner, Comment)
       SELECT ?, ?, 0, ?, ?, i.ID, 'none', ?, ? FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID
-      WHERE i.ID = ? AND IFNULL(s.Amount, 0) = ?`)
-      .bind(`แก้ไขโดย ${owner}`, amount - expected, today, today, owner, `คงเหลือ ${expected} → ${amount} (${time})`, itemID, expected),
+      WHERE i.ID = ? AND i.DeletedAt IS NULL AND IFNULL(s.Amount, 0) = ?`)
+      .bind(transactionType, amount - expected, today, today, owner, comment, itemID, expected),
     db.prepare(`INSERT INTO Stock (ItemID, Amount, Date1, Time1)
-      SELECT i.ID, ?, ?, ? FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID WHERE i.ID = ? AND IFNULL(s.Amount, 0) = ?
+      SELECT i.ID, ?, ?, ? FROM Items i LEFT JOIN Stock s ON s.ItemID = i.ID WHERE i.ID = ? AND i.DeletedAt IS NULL AND IFNULL(s.Amount, 0) = ?
       ON CONFLICT(ItemID) DO UPDATE SET Amount = excluded.Amount, Date1 = excluded.Date1, Time1 = excluded.Time1 WHERE Stock.Amount = ?`)
       .bind(amount, today, time, itemID, expected, expected),
   ]);

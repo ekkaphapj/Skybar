@@ -56,6 +56,32 @@ try {
   const changes = await history();
   check('sales show stock decrease', changes[0].TransactionType === 'ขาย' && changes[0].StockChange === -2);
   check('loss and purchase show correct signs', changes[1].StockChange === -1 && changes[2].StockChange === 3);
+
+  const edit = (user, body) => user.req('PUT', '/api/stock/' + itemID, body);
+  const stockBefore = (await balance()).data.Amount;
+  const historyBefore = changes[0].ID;
+  const financialBefore = (await admin.req('GET', '/api/export')).data.tables;
+  for (const action of ['reduce', 'dispose']) {
+    const body = { action, quantity: 2, expectedAmount: stockBefore };
+    check('staff cannot ' + action, (await edit(staff, body)).status === 403);
+    check('anonymous cannot ' + action, (await edit(anonymous, body)).status === 401);
+    for (const quantity of [0, -1, 1.5, '2', null, stockBefore + 1]) {
+      assert.equal((await edit(admin, { ...body, quantity })).status, 400);
+    }
+  }
+  check('rejected requests leave balance and history intact', (await balance()).data.Amount === stockBefore && (await history())[0].ID === historyBefore);
+  check('reduce subtracts the requested quantity', (await edit(admin, { action: 'reduce', quantity: 2, expectedAmount: stockBefore })).status === 200 && (await balance()).data.Amount === stockBefore - 2);
+  const reduction = (await history())[0];
+  check('reduction records a negative adjustment', reduction.TransactionType === 'แก้ไขโดย admin' && reduction.StockChange === -2);
+  const disposal = { action: 'dispose', quantity: stockBefore - 2, expectedAmount: stockBefore - 2, comment: 'ขวดแตก', owner: 'forged' };
+  const disposals = await Promise.all([edit(admin, disposal), edit(admin, disposal)]);
+  check('concurrent disposal records one successful stock movement', disposals.map(r => r.status).sort().join(',') === '200,409' && (await balance()).data.Amount === 0);
+  const [disposed, previous] = await history();
+  check('disposal history records the reason, signed quantity, balance and admin', disposed.TransactionType === 'ตัดจำหน่ายของเสีย' &&
+    disposed.StockChange === -disposal.quantity && disposed.Price === 0 && disposed.Owner === 'admin' &&
+    disposed.Comment.includes(`${disposal.expectedAmount} → 0`) && disposed.Comment.includes('ขวดแตก') && previous.ID === reduction.ID);
+  const financialAfter = (await admin.req('GET', '/api/export')).data.tables;
+  check('stock movements create no sale, account or cash records', ['Sell', 'Account', 'CASH'].every(table => financialAfter[table].length === financialBefore[table].length));
 } finally {
   assert.equal((await admin.req('POST', '/api/import', before)).status, 200);
   if (userID) await admin.req('PUT', '/api/users/' + userID, { active: false });

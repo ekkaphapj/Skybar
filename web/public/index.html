@@ -363,8 +363,16 @@
   <form id="stock-edit-form" class="card">
     <h3 id="stock-edit-title">แก้ไขสต็อก <span id="stock-edit-name"></span></h3>
     <input type="hidden" id="stock-edit-id"><input type="hidden" id="stock-edit-expected">
-    <label class="field"><span>จำนวนคงเหลือใหม่</span><input type="number" step="1" required id="stock-edit-amount" inputmode="numeric"></label>
-    <p class="hint">ระบบบันทึกยอดก่อนและหลัง พร้อมชื่อผู้แก้ไขในประวัติสต็อก</p>
+    <p>คงเหลือ <strong id="stock-edit-current"></strong></p>
+    <label class="field"><span>วิธีแก้ไข</span>
+      <select id="stock-edit-action">
+        <option value="set">ตั้งยอดคงเหลือ</option>
+        <option value="reduce">ลดสต็อก</option>
+        <option value="dispose">ตัดจำหน่ายของเสีย</option>
+      </select>
+    </label>
+    <label class="field"><span id="stock-edit-amount-label">จำนวนคงเหลือใหม่</span><input type="number" step="1" required id="stock-edit-amount" inputmode="numeric"></label>
+    <label class="field hidden" id="stock-edit-reason"><span>หมายเหตุ (ถ้ามี)</span><input id="stock-edit-comment"></label>
     <p id="stock-edit-error" class="error" role="status"></p>
     <div class="row"><button class="btn primary" id="btn-save-stock-balance" type="submit">บันทึก</button><button class="btn" id="btn-cancel-stock-edit" type="button">ยกเลิก</button></div>
   </form>
@@ -713,6 +721,6 @@
 <script src="/login.js?v=390c4faf3e40"></script>
 <script src="/report-image.js?v=fe139e5e6cd0"></script>
 <script src="/accounts.js?v=ba3e546a26fc"></script>
-<script src="/app.js?v=b0345e376a8c"></script>
+<script src="/app.js?v=cfc42c4247d6"></script>
 </body>
 </html>

@@ -658,23 +658,55 @@ function editStock(itemID) {
   $("stock-edit-id").value = row.itemCode;
   $("stock-edit-expected").value = row.amount;
   $("stock-edit-name").textContent = row.name;
-  $("stock-edit-amount").value = row.amount;
-  $("stock-edit-error").textContent = "";
+  $("stock-edit-current").textContent = num(row.amount);
+  $("stock-edit-action").value = "set";
+  $("stock-edit-comment").value = "";
+  onStockEditActionChange();
   $("stock-edit-dialog").showModal();
+}
+function onStockEditActionChange() {
+  const action = $("stock-edit-action").value;
+  const expectedAmount = Number($("stock-edit-expected").value);
+  const input = $("stock-edit-amount");
+  $("stock-edit-amount-label").textContent = { set: "จำนวนคงเหลือใหม่", reduce: "จำนวนที่ลด", dispose: "จำนวนของเสีย" }[action];
+  $("stock-edit-reason").classList.toggle("hidden", action !== "dispose");
+  if (action === "set") {
+    input.removeAttribute("min");
+    input.removeAttribute("max");
+    input.value = expectedAmount;
+  } else {
+    input.min = "1";
+    input.max = String(Math.max(expectedAmount, 0));
+    input.value = expectedAmount > 0 ? "1" : "";
+  }
+  $("stock-edit-error").textContent = "";
 }
 async function saveStockBalance(event) {
   event.preventDefault();
   if (currentUser?.role !== "admin") return;
   const input = $("stock-edit-amount"), button = $("btn-save-stock-balance");
-  if (!input.value.trim() || !Number.isSafeInteger(Number(input.value))) { $("stock-edit-error").textContent = "จำนวนสต็อกต้องเป็นจำนวนเต็ม"; return; }
+  if (button.disabled) return;
+  const value = Number(input.value);
+  if (!input.value.trim() || !Number.isSafeInteger(value)) { $("stock-edit-error").textContent = "จำนวนสต็อกต้องเป็นจำนวนเต็ม"; return; }
+  const action = $("stock-edit-action").value;
+  const expectedAmount = Number($("stock-edit-expected").value);
+  const body = action === "set" ? { action, expectedAmount, amount: value } : { action, expectedAmount, quantity: value, comment: $("stock-edit-comment").value.trim() };
+  const dialog = $("stock-edit-dialog");
   button.disabled = true;
+  $("btn-cancel-stock-edit").disabled = true;
+  dialog.oncancel = event => event.preventDefault();
+  $("stock-edit-error").textContent = "";
   try {
-    await api("/api/stock/" + $("stock-edit-id").value, { method: "PUT", body: { amount: Number(input.value), expectedAmount: Number($("stock-edit-expected").value) } });
-    $("stock-edit-dialog").close();
-    toast("บันทึกยอดสต็อกเรียบร้อย");
-    await loadStockTable();
+    await api("/api/stock/" + $("stock-edit-id").value, { method: "PUT", body });
+    dialog.close();
+    toast(action === "dispose" ? "บันทึกตัดจำหน่ายของเสียแล้ว" : "บันทึกยอดสต็อกเรียบร้อย");
+    await loadStockTable().catch(e => toastErr(e.message));
   } catch (e) { $("stock-edit-error").textContent = e.message; }
-  finally { button.disabled = false; }
+  finally {
+    dialog.oncancel = null;
+    $("btn-cancel-stock-edit").disabled = false;
+    button.disabled = false;
+  }
 }
 async function loadStockHistory(more = false) {
   if (more && !stockHistoryBefore) return;
@@ -1264,6 +1296,7 @@ function wire() {
   $("stock-history-item").onchange = stockTask(() => loadStockHistory());
   $("btn-load-stock-history").onclick = stockTask(() => loadStockHistory());
   $("btn-more-stock-history").onclick = stockTask(() => loadStockHistory(true));
+  $("stock-edit-action").onchange = onStockEditActionChange;
   $("stock-edit-form").onsubmit = saveStockBalance;
   $("btn-cancel-stock-edit").onclick = () => $("stock-edit-dialog").close();
   $("st-action").onchange = onStockActionChange;
