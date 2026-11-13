@@ -658,7 +658,7 @@ function editStock(itemID) {
   $("stock-edit-id").value = row.itemCode;
   $("stock-edit-expected").value = row.amount;
   $("stock-edit-name").textContent = row.name;
-  $("stock-edit-current").textContent = num(row.amount);
+  $("stock-edit-current").textContent = String(row.amount);
   $("stock-edit-action").value = "set";
   $("stock-edit-comment").value = "";
   onStockEditActionChange();

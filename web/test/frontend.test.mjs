@@ -51,6 +51,13 @@ function check(label, expression, expected) {
   assert.equal(vm.runInContext(expression, context), expected, label);
   console.log("  ok    " + label); passed++;
 }
+vm.runInContext(`
+  currentUser = { role: "admin" };
+  stockRows = [{ itemCode: 1, name: "Black/White Russian", amount: 0 }];
+  editStock(1);
+`, context);
+check("stock edit displays a zero balance as plain text", "$('stock-edit-current').textContent", "0");
+vm.runInContext("$('stock-edit-dialog').close(); currentUser = null;", context);
 node("sell-qty").value = "1";
 vm.runInContext(`
   addToCart({ ID: 1, Name1: 'เบียร์', Price: 60, TypeName: 'เครื่องดื่ม' });
